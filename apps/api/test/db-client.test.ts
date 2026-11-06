@@ -1,3 +1,6 @@
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { createSqlClient } from '../src/db/client.js';
 
@@ -25,6 +28,26 @@ describe('createSqlClient', () => {
       await expect(db.sql.query('INSERT INTO t (k) VALUES ($1)', ['a'])).rejects.toThrow();
     } finally {
       await db.close();
+    }
+  });
+
+  /**
+   * A fresh clone has no data/ directory, and PGlite's mkdir is not recursive:
+   * `pglite://./data/tca` crashed the API at boot with ENOENT until the client
+   * created the path itself. Found by booting the server, not by a test, which
+   * is why there is now a test.
+   */
+  it('creates a missing parent directory for a file-backed url', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'tca-db-'));
+    const dataDir = join(base, 'nested', 'deeper', 'tca');
+
+    const db = await createSqlClient(`pglite://${dataDir}`);
+    try {
+      await db.sql.query('CREATE TABLE t (k text)');
+      expect((await stat(dataDir)).isDirectory()).toBe(true);
+    } finally {
+      await db.close();
+      await rm(base, { recursive: true, force: true });
     }
   });
 

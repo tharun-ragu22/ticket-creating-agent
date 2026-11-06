@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises';
 import type { SqlClient } from '@tca/contracts';
 
 export interface Database {
@@ -38,6 +39,15 @@ export async function createSqlClient(databaseUrl: string): Promise<Database> {
 
 async function openPglite(dataDir: string): Promise<Database> {
   const { PGlite } = await import('@electric-sql/pglite');
+
+  // PGlite's own mkdir is not recursive, so the default
+  // DATABASE_URL=pglite://./data/tca fails with ENOENT on a fresh clone, where
+  // data/ does not exist yet. Creating the path here means the documented
+  // default works on first boot rather than after a manual mkdir.
+  if (dataDir !== ':memory:') {
+    await mkdir(dataDir, { recursive: true });
+  }
+
   const db = await PGlite.create(dataDir === ':memory:' ? undefined : { dataDir });
 
   return {

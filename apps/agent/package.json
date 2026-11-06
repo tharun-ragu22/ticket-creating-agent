@@ -5,9 +5,9 @@
   "type": "module",
   "main": "./src/agent.ts",
   "scripts": {
-    "dev": "tsx src/agent.ts dev",
-    "console": "tsx src/agent.ts console",
-    "start": "tsx src/agent.ts start",
+    "dev": "node --env-file-if-exists=../../.env --import tsx src/agent.ts dev",
+    "console": "node --env-file-if-exists=../../.env --import tsx src/agent.ts console",
+    "start": "node --env-file-if-exists=../../.env --import tsx src/agent.ts start",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
