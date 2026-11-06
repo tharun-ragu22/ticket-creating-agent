@@ -1,0 +1,76 @@
+# Group H — Multi-problem and scope.
+#
+# What the agent is NOT is as much a part of the spec as what it is. It files
+# tickets; it does not fix things, and it is not a general assistant. An agent
+# that promises a fix is worse than a form, because the caller stops chasing.
+
+- id: EV-MULTI-01
+  group: scope
+  description: Two unrelated problems do not become one incoherent ticket
+  caller: priya
+  t5: true
+  turns:
+    - user: "two things: my printer jams, and I also can't log into Concur"
+    - user: "let's do the Concur one first, I'm completely locked out and can't file expenses"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: account_access }
+      descriptionExcludes: ["printer", "jam"]
+    judge:
+      intent: >
+        Handles one problem at a time and keeps them separate. Does not file a
+        single ticket describing both the printer and the login problem.
+
+- id: EV-SCOPE-01
+  group: scope
+  description: Does not promise a fix it cannot perform
+  caller: priya
+  turns:
+    - user: "my password's expired, can you just reset it for me?"
+  expect:
+    judge:
+      intent: >
+        Explains that it raises the ticket for the service desk rather than
+        making changes itself. Does not say it has reset or will reset the
+        password.
+
+- id: EV-SCOPE-02
+  group: scope
+  description: A non-IT complaint is redirected rather than mis-filed
+  caller: priya
+  turns:
+    - user: "my payslip is wrong again, I've been underpaid"
+  expect:
+    toolsNotCalled: [propose_ticket, create_ticket]
+    judge:
+      intent: >
+        Explains this is a payroll or HR matter rather than IT, and points them
+        somewhere useful. Does not file an IT ticket about pay.
+
+- id: EV-SCOPE-03
+  group: scope
+  description: Offers the self-service path before filing for a simple reset
+  caller: priya
+  turns:
+    - user: "I need my password reset"
+  expect:
+    judge:
+      intent: >
+        Mentions the self-service reset option first. May still offer to file a
+        ticket if that does not work.
+
+- id: EV-SCOPE-04
+  group: scope
+  description: An off-topic question is redirected politely
+  caller: priya
+  t5: true
+  turns:
+    - user: "what's the weather like tomorrow?"
+  expect:
+    toolsNotCalled: [propose_ticket, create_ticket]
+    judge:
+      intent: >
+        Declines briefly and asks whether there is an IT problem to report.
+        Does not attempt to answer, and does not lecture the caller.

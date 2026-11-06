@@ -1,0 +1,147 @@
+# Group B — Category classification.
+#
+# Threshold: correct category >= 90%. These are cheap to get right and cheap
+# to regress, so the whole taxonomy is covered rather than a sample.
+#
+# Every case here drives the conversation to a filed ticket, because the
+# category is only observable on the ticket. The closing "yes" is what makes
+# that happen.
+
+- id: EV-CAT-01
+  group: category
+  description: Dropping office Wi-Fi is network, not hardware
+  caller: priya
+  t5: true
+  turns:
+    - user: "the wifi keeps dropping in the Toronto office"
+    - user: "it happens every few minutes, a few of us on the floor have it, I keep losing my session"
+    - user: "yes go ahead"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: network }
+
+- id: EV-CAT-02
+  group: category
+  description: An application crashing after an update is software
+  caller: priya
+  t5: true
+  turns:
+    - user: "Outlook crashes on launch since the update"
+    - user: "every single time, started this morning, I can't send the invoices"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: software }
+
+- id: EV-CAT-03
+  group: category
+  description: A dead machine is hardware
+  caller: priya
+  t5: true
+  turns:
+    - user: "my laptop won't power on at all, no lights"
+    - user: "I've tried a different charger and held the power button, nothing, I'm completely stuck"
+    - user: "yes please"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: hardware }
+
+- id: EV-CAT-04
+  group: category
+  description: A lockout is account_access
+  caller: priya
+  t5: true
+  turns:
+    - user: "I'm locked out of Okta after too many tries"
+    - user: "just me, and no, I can't get into anything"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: account_access }
+
+- id: EV-CAT-05
+  group: category
+  description: A jamming printer is printing
+  caller: priya
+  t5: true
+  turns:
+    - user: "the printer on the fourth floor jams on every duplex job"
+    - user: "single sided is fine so I can work around it, everyone on the floor hits it"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: printing }
+
+# The real ambiguity in the taxonomy. "Not receiving email" is a mail-flow
+# problem, not a broken application, and getting it wrong routes the ticket to
+# the wrong queue.
+- id: EV-CAT-06
+  group: category
+  description: Mail not arriving is email, not software
+  caller: priya
+  t5: true
+  turns:
+    - user: "I'm not receiving any external email since Friday"
+    - user: "internal mail is fine, Outlook itself works, I just get nothing from outside. I'm missing supplier invoices."
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: email }
+
+# Phishing is the one category where the agent must not be reassuring. It
+# also drives priority to urgent regardless of impact.
+- id: EV-CAT-07
+  group: category
+  description: A credential-phishing report is security, and urgent
+  caller: priya
+  t5: true
+  turns:
+    - user: "I got an email asking me to confirm my password and I think I clicked it"
+    - user: "I did type my password in, yes"
+    - user: "yes please"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: security, priority: urgent }
+    judge:
+      intent: >
+        Treats it seriously and files it. Does not reassure the caller that it
+        is probably nothing, and does not ask them to forward the email as a
+        substitute for filing.
+
+- id: EV-CAT-08
+  group: category
+  description: A dead desk phone is telephony
+  caller: priya
+  t5: true
+  turns:
+    - user: "my desk phone has no dial tone"
+    - user: "started yesterday, only mine as far as I know, I can use Teams instead"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { category: telephony }
+
+# Guessing a category from "being weird" produces a ticket a technician
+# cannot act on. Asking first is the correct behaviour even though it costs a
+# turn.
+- id: EV-CAT-09
+  group: category
+  description: A contentless opener is asked about, never guessed
+  caller: priya
+  turns:
+    - user: "my computer's just being weird"
+  expect:
+    toolsNotCalled: [propose_ticket, create_ticket]
+    judge:
+      intent: >
+        Asks what specifically is happening. Does not guess at a category, does
+        not propose a ticket, and does not offer a list of categories to choose
+        from.

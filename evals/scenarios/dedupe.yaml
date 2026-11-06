@@ -1,0 +1,52 @@
+# Group G — Deduplication.
+#
+# Priya has one open ticket on record: SI-10388 "VPN drops on hotel wifi"
+# (pending). EV-DUP-03 is the counterweight: dedupe that fires too eagerly
+# buries genuinely new problems as comments on old ones, which is worse than
+# an occasional duplicate because nobody ever triages it.
+
+- id: EV-DUP-01
+  group: dedupe
+  description: A repeat of the caller's own open ticket offers a comment, not a new ticket
+  caller: priya
+  t5: true
+  turns:
+    - user: "my VPN keeps dropping when I'm on hotel wifi, it's still happening"
+    - user: "yes, that's the one"
+  expect:
+    toolsCalled: [comment_on_existing_ticket]
+    toolsNotCalled: [create_ticket]
+    judge:
+      intent: >
+        Recognises this as the existing VPN ticket, refers to it, and offers to
+        add to it rather than filing a new one.
+
+- id: EV-DUP-02
+  group: dedupe
+  description: A known site-wide outage is commented on rather than re-filed
+  caller: dave
+  turns:
+    - user: "is the network down? nothing works for anyone on my floor"
+  expect:
+    judge:
+      intent: >
+        Asks enough to establish the scope and treats it as a possible wider
+        outage. Does not immediately file an individual hardware ticket.
+
+# Superficially similar to SI-10388 — both are VPN — but a different problem.
+# Filing a new ticket is correct here.
+- id: EV-DUP-03
+  group: dedupe
+  description: A genuinely different problem gets its own ticket
+  caller: priya
+  t5: true
+  turns:
+    - user: "the VPN client won't install the update, it fails at ninety percent"
+    - user: "that's different, my old VPN issue was about dropping on hotel wifi. This won't even update."
+    - user: "just me, and I can still connect on the old version"
+    - user: "yes, a new one please"
+  expect:
+    toolsCalled: [create_ticket]
+    toolsNotCalled: [comment_on_existing_ticket]
+    ticket:
+      descriptionExcludes: ["hotel"]

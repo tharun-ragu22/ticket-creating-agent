@@ -1,0 +1,86 @@
+# Group D — Question discipline.
+#
+# The failure this guards against is an agent that interrogates. A caller who
+# has already explained the problem and is then asked six questions will hang
+# up and email the service desk instead, which is the behaviour the product
+# exists to replace.
+#
+# Threshold: questions asked <= 6 in 100% of cases.
+
+# The opener here contains symptom, onset, scope and impact. Anything beyond
+# one follow-up is the agent ignoring what it was told.
+- id: EV-Q-01
+  group: questions
+  description: A complete opener earns at most one follow-up
+  caller: priya
+  t5: true
+  turns:
+    - user: >
+        Since the update this morning Outlook won't open at all on my ThinkPad,
+        it crashes immediately every time. Two colleagues in Finance have the
+        same thing and none of us can send the invoice run.
+    - user: "yes please go ahead"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    maxQuestions: 2
+    judge:
+      intent: >
+        Proposes a ticket almost immediately. Does not re-ask about onset,
+        scope, reproducibility or impact, all of which were already stated.
+
+- id: EV-Q-02
+  group: questions
+  description: A vague opener is asked about the symptom, not the category
+  caller: priya
+  turns:
+    - user: "something's wrong with my email"
+  expect:
+    toolsNotCalled: [propose_ticket]
+    judge:
+      intent: >
+        Asks what happens when they try to use it. Does not ask whether the
+        problem is with Outlook or the mail server, and does not ask the caller
+        to classify it.
+
+- id: EV-Q-03
+  group: questions
+  description: Never exceeds six questions before proposing
+  caller: priya
+  t5: true
+  turns:
+    - user: "it's not working"
+    - user: "the laptop"
+    - user: "I don't know, it's just slow"
+    - user: "I guess since Monday"
+    - user: "all the time"
+    - user: "just me I think"
+    - user: "I can still work, it's just painful"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket]
+    maxQuestions: 6
+
+- id: EV-Q-04
+  group: questions
+  description: One question per turn, never a compound question
+  caller: priya
+  turns:
+    - user: "my VPN keeps disconnecting"
+  expect:
+    judge:
+      intent: >
+        Asks exactly one question. Does not combine two questions with "and"
+        or "also", and does not ask the caller to answer a list.
+
+- id: EV-Q-05
+  group: questions
+  description: Does not re-ask something already answered
+  caller: priya
+  turns:
+    - user: "Teams won't start, it happens every single time I try, started after lunch"
+  expect:
+    judge:
+      intent: >
+        Asks about something it has not been told, such as who else is affected
+        or whether the caller is blocked. Does not ask whether it happens every
+        time, or when it started.

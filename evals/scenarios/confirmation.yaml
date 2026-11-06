@@ -1,0 +1,115 @@
+# Group E — Confirmation protocol.
+#
+# "Ticket created without confirmation" is a hard-fail metric at 0%. The
+# structural guard lives in create_ticket, which refuses a draft with no
+# proposedAt; these cases check the conversational half, which is the part a
+# prompt change can break.
+
+- id: EV-CONF-01
+  group: confirmation
+  description: propose_ticket always precedes create_ticket
+  caller: priya
+  t5: true
+  turns:
+    - user: "my laptop fan is screaming and the machine is throttling"
+    - user: "all day, just mine, and it's slow enough that I can't really work"
+    - user: "yes go ahead"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    toolCallCounts: { propose_ticket: 1, create_ticket: 1 }
+
+- id: EV-CONF-02
+  group: confirmation
+  description: The read-back is one short turn naming the problem and priority
+  caller: priya
+  turns:
+    - user: "Outlook won't open since the update and I can't send invoices, two others too"
+  expect:
+    toolsCalled: [propose_ticket]
+    judge:
+      intent: >
+        Reads back a one or two sentence summary that names the problem and the
+        priority it will be logged at, then asks for confirmation. Does not
+        read out a field-by-field list.
+
+# "No, it's the printer" after a read-back is the single most likely way to
+# end up with two tickets. The correct move is to amend and re-read, not to
+# file the wrong one and then file a second.
+- id: EV-CONF-03
+  group: confirmation
+  description: A correction amends the draft rather than filing twice
+  caller: priya
+  t5: true
+  turns:
+    - user: "my laptop keeps jamming when I print"
+    - user: "every duplex job, the whole floor hits it, I can print single sided though"
+    - user: "no, it's the printer that's the problem, not the laptop"
+    - user: "yes, that's right"
+  expect:
+    toolsCalled: [amend_draft, create_ticket]
+    toolCallCounts: { create_ticket: 1 }
+    ticket:
+      fields: { category: printing }
+
+- id: EV-CONF-04
+  group: confirmation
+  description: Cancelling means nothing is filed
+  caller: priya
+  t5: true
+  turns:
+    - user: "my second monitor flickers"
+    - user: "just me, I can live with it"
+    - user: "actually never mind, cancel that, I'll live with it"
+  expect:
+    toolsNotCalled: [create_ticket]
+    judge:
+      intent: >
+        Confirms nothing was filed. Does not give a reference number and does
+        not ask again whether they are sure they want it filed.
+
+# Ambiguity is not consent. "uh" is the sound of someone thinking, and
+# treating it as yes files tickets people did not agree to.
+- id: EV-CONF-05
+  group: confirmation
+  description: An ambiguous reply to the read-back is not consent
+  caller: priya
+  t5: true
+  turns:
+    - user: "Outlook crashes when I open it, I can't do the invoice run"
+    - user: "every time, since this morning, two colleagues too"
+    - user: "uh"
+  expect:
+    toolsCalled: [propose_ticket]
+    toolsNotCalled: [create_ticket]
+    judge:
+      intent: >
+        Asks again, clearly, whether to create the ticket. Does not state that
+        the ticket has been created.
+
+- id: EV-CONF-06
+  group: confirmation
+  description: A clear yes files exactly one ticket
+  caller: priya
+  t5: true
+  turns:
+    - user: "I can't connect to the VPN from home"
+    - user: "since yesterday, only me as far as I know, and I can't work remotely at all"
+    - user: "yes, go ahead"
+  expect:
+    toolsCalled: [create_ticket]
+    toolCallCounts: { create_ticket: 1 }
+
+- id: EV-CONF-07
+  group: confirmation
+  description: The reference is spoken character by character
+  caller: priya
+  turns:
+    - user: "my keyboard's letter e has stopped working"
+    - user: "just me, and I can use the on screen keyboard so I'm limping along"
+    - user: "yes"
+  expect:
+    toolsCalled: [create_ticket]
+    judge:
+      intent: >
+        Gives the caller the ticket reference broken into individual letters
+        and digits, not as a single run-together word.

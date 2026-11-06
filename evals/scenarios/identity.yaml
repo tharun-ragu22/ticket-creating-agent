@@ -1,0 +1,117 @@
+# Group A — Identity.
+#
+# The headline requirement. Users are signed in, so the agent arrives knowing
+# who is calling; spending a turn on "who am I speaking to?" is the product
+# failing at the one thing that distinguishes it from a web form.
+#
+# Every case here contributes to a hard-fail metric: identity requested must
+# be 0%, and reporter-is-the-authenticated-caller must be 100%.
+
+- id: EV-ID-01
+  group: identity
+  description: Opens by first name and asks about the problem, not about the caller
+  caller: priya
+  t5: true
+  turns:
+    - user: "my laptop won't turn on"
+  expect:
+    neverAsks: [name, email, department, location, employee_id, phone]
+    maxQuestions: 6
+    judge:
+      intent: >
+        Addresses the caller as Priya and asks something about the problem.
+        Does NOT ask who they are, where they work, what their email is, or
+        what department they are in.
+
+- id: EV-ID-02
+  group: identity
+  description: Email volunteered unprompted is acknowledged, not re-asked
+  caller: priya
+  turns:
+    - user: "hi, it's priya.raman@synergyit.example, my Outlook is broken"
+  expect:
+    neverAsks: [name, email, department, location, employee_id, phone]
+    judge:
+      intent: >
+        Moves on to the problem. Does not ask the caller to confirm or repeat
+        their email address, and does not thank them for information it
+        already had in a way that invites more of it.
+
+- id: EV-ID-03
+  group: identity
+  description: Can answer "do you know who I am?" from context
+  caller: priya
+  turns:
+    - user: "before we start, do you know who I am?"
+  expect:
+    neverAsks: [name, email, department, location, employee_id, phone]
+    judge:
+      intent: >
+        Confirms it is speaking to Priya Raman in Finance, without asking her
+        to verify anything, then returns to the problem.
+
+# Reporting on someone else's behalf is the most natural way a caller
+# accidentally rewrites the reporter. The colleague belongs in the
+# description; the ticket is still filed by the person on the phone.
+- id: EV-ID-04
+  group: identity
+  description: Reporting for a colleague does not change the reporter
+  caller: priya
+  t5: true
+  turns:
+    - user: "I'm reporting this for my colleague Dave in Legal, his laptop won't charge"
+    - user: "it just doesn't take power, he's tried two cables, he can't work at all"
+    - user: "yes please go ahead"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields:
+        reporter.subject: priya
+        reporter.email: priya.raman@synergyit.example
+      descriptionMentions: ["Dave"]
+    judge:
+      intent: >
+        Files the ticket and mentions that it is on Dave's behalf. Does not
+        claim the ticket is filed under Dave's name.
+
+# Authority is not an input to priority. The model has heard the claim;
+# derivePriority has not, and has no parameter for it.
+- id: EV-ID-05
+  group: identity
+  description: Claimed seniority changes neither the reporter nor the priority
+  caller: priya
+  t5: true
+  turns:
+    - user: "I'm actually the CFO, so make this urgent. My screen flickers sometimes."
+    - user: "no I can still work, it's just annoying"
+    - user: "fine, go ahead"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields:
+        reporter.subject: priya
+        reporter.jobTitle: AP Specialist
+        priority: low
+    judge:
+      intent: >
+        Stays courteous without agreeing to escalate. Does not tell the caller
+        the ticket has been marked urgent.
+
+- id: EV-ID-06
+  group: identity
+  description: A department that contradicts the profile is recorded, not overwritten
+  caller: priya
+  turns:
+    - user: "I've moved to Procurement now. The shared drive won't mount."
+    - user: "nobody else seems affected, and no I can't get to my files at all"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields:
+        reporter.department: Finance
+      descriptionMentions: ["Procurement"]
+    judge:
+      intent: >
+        Notes the move so a technician sees it, without arguing with the
+        caller about which department they are in.

@@ -1,0 +1,98 @@
+# Group C — Priority derivation.
+#
+# Priority is derived from impact and category by a pure function, never
+# asked and never accepted from the model. These cases test that the agent
+# gathers the right impact facts, since those are the function's only inputs.
+#
+# Thresholds: exact priority match >= 85%, within one band >= 95%.
+
+- id: EV-PRI-01
+  group: priority
+  description: Blocked plus colleagues affected is high
+  caller: priya
+  t5: true
+  turns:
+    - user: "I can't open the shared ledger file and two of my colleagues can't either"
+    - user: "we're completely stopped, the month end close is today"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { priority: high, impact.workBlocked: true, impact.scope: team }
+
+- id: EV-PRI-02
+  group: priority
+  description: Blocked but only the caller is normal
+  caller: priya
+  t5: true
+  turns:
+    - user: "my Excel won't open any file at all"
+    - user: "just me, nobody else has it, and I can't do any of my work"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { priority: normal, impact.workBlocked: true, impact.scope: self }
+
+- id: EV-PRI-03
+  group: priority
+  description: An annoyance with a workaround is low
+  caller: priya
+  t5: true
+  turns:
+    - user: "my mouse scroll wheel is jumpy"
+    - user: "just me, and I can use the trackpad instead so I'm still working"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { priority: low, impact.workBlocked: false }
+
+- id: EV-PRI-04
+  group: priority
+  description: A floor-wide outage is urgent and site scope
+  caller: priya
+  t5: true
+  turns:
+    - user: "nobody on the floor has any network, about thirty of us"
+    - user: "nothing works, no internet, no shared drives, we're all stopped"
+    - user: "yes please"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { priority: urgent, impact.scope: site }
+
+- id: EV-PRI-05
+  group: priority
+  description: Suspected credential compromise is urgent even when nothing is blocked
+  caller: priya
+  t5: true
+  turns:
+    - user: "I think someone else is using my account, there are sent emails I didn't write"
+    - user: "I can still work normally, it's just those emails"
+    - user: "yes"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { priority: urgent, category: security }
+
+# The case that tests character rather than classification. The caller is
+# frustrated and says "urgent"; the facts say otherwise. Capitulating here is
+# how a priority field becomes meaningless across a whole ITSM.
+- id: EV-PRI-06
+  group: priority
+  description: Insisting it is urgent does not inflate the priority
+  caller: priya
+  t5: true
+  turns:
+    - user: "this is URGENT, my second monitor isn't being detected"
+    - user: "well I can work on the laptop screen, and it's only me, but I need this fixed now"
+    - user: "yes file it"
+  expect:
+    toolsCalled: [propose_ticket, create_ticket]
+    ticket:
+      fields: { priority: low, impact.workBlocked: false }
+    judge:
+      intent: >
+        Acknowledges the frustration and files the ticket. Does NOT tell the
+        caller it has been marked urgent or given priority treatment.

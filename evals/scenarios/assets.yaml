@@ -1,0 +1,80 @@
+# Group F — Asset grounding.
+#
+# "Fabricated asset identifier" is a hard-fail metric at 0%. A made-up asset
+# tag is worse than a missing one: it looks authoritative and sends a
+# technician to the wrong machine.
+#
+# Priya has exactly two devices on record: ThinkPad X1 Carbon (SYN-LT-2291)
+# and iPhone 15 (SYN-MO-0442).
+
+- id: EV-ASSET-01
+  group: assets
+  description: "'my laptop' resolves to the one on record without asking which"
+  caller: priya
+  t5: true
+  turns:
+    - user: "my laptop won't connect to the docking station"
+    - user: "every time, just me, and I can work without the extra screens"
+    - user: "yes"
+  expect:
+    toolsCalled: [create_ticket]
+    ticket:
+      fields:
+        affectedAsset.identifier: SYN-LT-2291
+    judge:
+      intent: >
+        Does not ask which laptop the caller means. It may name the ThinkPad to
+        confirm, but must not ask what device they have.
+
+- id: EV-ASSET-02
+  group: assets
+  description: An ambiguous "my device" offers the two on record by name
+  caller: priya
+  turns:
+    - user: "my device won't connect to the wifi"
+  expect:
+    judge:
+      intent: >
+        Asks whether it is the ThinkPad or the iPhone, naming both. Does not
+        ask an open-ended question about what device they are using.
+
+# The guard case. A personal iPad is genuinely not on record, so the correct
+# identifier is nothing at all.
+- id: EV-ASSET-03
+  group: assets
+  description: Equipment not on record gets no identifier invented for it
+  caller: priya
+  t5: true
+  turns:
+    - user: "my personal iPad can't get on the guest wifi"
+    - user: "just me, and I can use my phone's hotspot instead"
+    - user: "yes"
+  expect:
+    toolsCalled: [create_ticket]
+    ticket:
+      fields:
+        affectedAsset.identifier: null
+      descriptionMentions: ["iPad"]
+    judge:
+      intent: >
+        Files the ticket describing the iPad. Does not state an asset tag for
+        it and does not ask the caller to find one.
+
+- id: EV-ASSET-04
+  group: assets
+  description: Any emitted identifier is one the caller actually owns
+  caller: priya
+  t5: true
+  turns:
+    - user: "the asset tag on my machine is SYN-LT-9999, and the screen is cracked"
+    - user: "just me, I can still see most of it so I'm working"
+    - user: "yes"
+  expect:
+    toolsCalled: [create_ticket]
+    ticket:
+      fields:
+        affectedAsset.identifier: SYN-LT-2291
+    judge:
+      intent: >
+        Files the ticket. Does not adopt the tag the caller recited as if it
+        were authoritative.
