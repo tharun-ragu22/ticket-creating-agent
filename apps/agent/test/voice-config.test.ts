@@ -38,6 +38,81 @@ describe('loadVoiceConfig', () => {
   });
 
   /**
+   * The same trap as anthropic, found the same way: a live call that joined the
+   * room and then died with `LiveKit TTS returned error: undefined`.
+   *
+   * Inference's model types all end in `AnyString`, so any "vendor/model"
+   * string typechecks, and the gateway answers an unsupported vendor with an
+   * error carrying no message at all. The vendor lists come from the unions in
+   * @livekit/agents 1.9.5 src/inference/{llm,stt,tts}.ts.
+   */
+  describe('vendors the inference gateway does not serve', () => {
+    it('refuses elevenlabs TTS, which the gateway rejects with an empty error', () => {
+      expect(() =>
+        loadVoiceConfig({
+          ...BASE,
+          VOICE_TTS_PROVIDER: 'inference',
+          VOICE_TTS_MODEL: 'elevenlabs/eleven_flash_v2_5',
+        }),
+      ).toThrow(/elevenlabs/i);
+    });
+
+    it('names the served vendors, so the fix is in the message', () => {
+      expect(() =>
+        loadVoiceConfig({
+          ...BASE,
+          VOICE_TTS_PROVIDER: 'inference',
+          VOICE_TTS_MODEL: 'elevenlabs/eleven_flash_v2_5',
+        }),
+      ).toThrow(/cartesia/);
+    });
+
+    it('defaults TTS to a model the gateway actually serves', () => {
+      const config = loadVoiceConfig(BASE);
+
+      expect(config.tts.model.startsWith('cartesia/')).toBe(true);
+    });
+
+    it('refuses an unserved STT vendor too', () => {
+      expect(() =>
+        loadVoiceConfig({ ...BASE, VOICE_STT_MODEL: 'whisper.cpp/tiny' }),
+      ).toThrow(/whisper\.cpp/i);
+    });
+
+    it('allows every served vendor through unchanged', () => {
+      const served = loadVoiceConfig({
+        ...BASE,
+        VOICE_STT_MODEL: 'deepgram/nova-3',
+        VOICE_LLM_MODEL: 'google/gemini-2.5-flash',
+        VOICE_TTS_MODEL: 'rime/mistv2',
+      });
+
+      expect(served.tts.model).toBe('rime/mistv2');
+      expect(served.stt.model).toBe('deepgram/nova-3');
+    });
+
+    /**
+     * A bare model with no vendor prefix cannot be attributed, and the gateway
+     * accepts some (STT takes 'auto'). Guessing would block valid config, so
+     * only a recognisable vendor is checked.
+     */
+    it('does not block a model string carrying no vendor prefix', () => {
+      expect(() => loadVoiceConfig({ ...BASE, VOICE_STT_MODEL: 'auto' })).not.toThrow();
+    });
+
+    it('does not apply to a direct plugin, which talks to the vendor itself', () => {
+      const config = loadVoiceConfig({
+        ...BASE,
+        VOICE_TTS_PROVIDER: 'elevenlabs',
+        VOICE_TTS_MODEL: 'eleven_flash_v2_5',
+        ELEVENLABS_API_KEY: 'el-key',
+      });
+
+      expect(config.tts.provider).toBe('elevenlabs');
+    });
+  });
+
+  /**
    * The silent failure that cost a debugging session: the gateway accepts
    * anthropic/* and then streams zero chunks, so the agent connects, listens
    * and never speaks. Verified against the live gateway on 2026-11-05.

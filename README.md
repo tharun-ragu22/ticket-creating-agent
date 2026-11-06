@@ -64,7 +64,33 @@ VOICE_TTS_PROVIDER=inference
 A direct plugin is selected per stage and must bring its own key, checked at
 startup rather than on the first word of the first call.
 
-### Anthropic is not served by Inference, and fails silently
+### Inference serves a fixed vendor list, and rejects the rest uselessly
+
+Every model type in `@livekit/agents` ends in `AnyString`, so **any**
+`vendor/model` string typechecks and reaches the gateway. An unsupported vendor
+comes back with an error carrying no message:
+
+```
+ERROR  AgentSession is closing due to an unrecoverable error
+       type: "tts_error"  label: "inference.TTS"
+       error: "LiveKit TTS returned error: undefined"  body: null
+```
+
+The vendors it does serve, from the unions in `src/inference/{llm,stt,tts}.ts`:
+
+| Stage | Served |
+|---|---|
+| STT | `assemblyai` `cartesia` `deepgram` `google` `inworld` `speechmatics` `xai` |
+| LLM | `deepseek-ai` `google` `moonshotai` `openai` `xai` `zai` — **no `anthropic`** |
+| TTS | `assemblyai` `cartesia` `deepgram` `fishaudio` `inworld` `rime` `xai` — **no `elevenlabs`** |
+
+`loadVoiceConfig` checks the vendor prefix of each stage at startup, so an
+unserved vendor is a one-line message instead of a call that dies mid-session.
+Two live calls were lost to this before the check existed — `anthropic` on the
+LLM side, `elevenlabs` on the TTS side, the latter being the repo's own former
+default. Re-read those unions when bumping `@livekit/agents`.
+
+### Anthropic is the confusing one: accepted, then silent
 
 Measured against the live gateway on 2026-11-05: a request for
 `anthropic/claude-sonnet-4-6` — or bare `claude-sonnet-4-6` — is **accepted**,

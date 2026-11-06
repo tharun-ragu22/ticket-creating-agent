@@ -32,24 +32,69 @@ export interface VoiceConfig {
 }
 
 /**
- * Anthropic is unreachable through LiveKit Inference.
+ * The vendors LiveKit Inference will actually serve, per stage.
  *
- * Measured against the live gateway on 2026-11-05: a request for
- * `anthropic/claude-sonnet-4-6` is accepted, returns no error, and streams
- * zero chunks. The agent then connects, transcribes, and never says anything,
- * with nothing in the logs to explain it. Refusing the combination at startup
- * turns a silent mute into a one-line message.
+ * Taken from the model unions in @livekit/agents 1.9.5
+ * (src/inference/{llm,stt,tts}.ts). Every one of those unions ends in
+ * `AnyString`, so *any* "vendor/model" string typechecks and reaches the
+ * gateway, which answers an unsupported vendor with an error carrying no
+ * message at all:
+ *
+ *   ERROR  AgentSession is closing due to an unrecoverable error
+ *          type: "tts_error"  error: "LiveKit TTS returned error: undefined"
+ *
+ * Two live calls were lost to this — anthropic on the LLM side, elevenlabs on
+ * the TTS side — so the check is a startup failure with a named fix instead.
+ *
+ * Re-read these lists when bumping @livekit/agents; new vendors get added.
  */
-function assertRoutable(provider: LlmProvider, model: string): void {
+const INFERENCE_VENDORS = {
+  stt: ['assemblyai', 'cartesia', 'deepgram', 'google', 'inworld', 'speechmatics', 'xai'],
+  llm: ['deepseek-ai', 'google', 'moonshotai', 'openai', 'xai', 'zai'],
+  tts: ['assemblyai', 'cartesia', 'deepgram', 'fishaudio', 'inworld', 'rime', 'xai'],
+} as const;
+
+type Stage = keyof typeof INFERENCE_VENDORS;
+
+const ENV_VAR: Record<Stage, string> = {
+  stt: 'VOICE_STT_MODEL',
+  llm: 'VOICE_LLM_MODEL',
+  tts: 'VOICE_TTS_MODEL',
+};
+
+/**
+ * Anthropic gets its own message because its failure is the confusing one: the
+ * gateway accepts the request and streams zero chunks rather than erroring, so
+ * the agent connects, transcribes, and never speaks.
+ */
+function assertRoutable(stage: Stage, provider: string, model: string): void {
   if (provider !== 'inference') return;
-  if (!/anthropic|claude/i.test(model)) return;
+
+  if (stage === 'llm' && /anthropic|claude/i.test(model)) {
+    throw new Error(
+      `VOICE_LLM_MODEL="${model}" cannot be served by LiveKit Inference: the gateway ` +
+        'accepts anthropic/claude models and then streams zero chunks, so the agent ' +
+        'would connect and never speak. Either use a served model ' +
+        '(e.g. google/gemini-2.5-flash, openai/gpt-4.1-mini), or set ' +
+        'VOICE_LLM_PROVIDER=anthropic with ANTHROPIC_API_KEY to call Anthropic directly.',
+    );
+  }
+
+  // No slash means no vendor to check, and the gateway accepts some bare
+  // values (STT takes 'auto'). Only reject what is recognisably wrong.
+  const slash = model.indexOf('/');
+  if (slash < 0) return;
+
+  const vendor = model.slice(0, slash).toLowerCase();
+  const served: readonly string[] = INFERENCE_VENDORS[stage];
+  if (served.includes(vendor)) return;
 
   throw new Error(
-    `VOICE_LLM_MODEL="${model}" cannot be served by LiveKit Inference: the gateway ` +
-      'accepts anthropic/claude models and then streams zero chunks, so the agent ' +
-      'would connect and never speak. Either use a served model ' +
-      '(e.g. google/gemini-2.5-flash, openai/gpt-4.1-mini), or set ' +
-      'VOICE_LLM_PROVIDER=anthropic with ANTHROPIC_API_KEY to call Anthropic directly.',
+    `${ENV_VAR[stage]}="${model}" cannot be served by LiveKit Inference: it does not ` +
+      `offer "${vendor}" for ${stage.toUpperCase()}, and rejects the request with an ` +
+      'empty error message, so the call dies mid-session. Served vendors are ' +
+      `${served.join(', ')}. To use ${vendor} directly instead, set ` +
+      `VOICE_${stage.toUpperCase()}_PROVIDER=${vendor} and supply its API key.`,
   );
 }
 
@@ -100,8 +145,15 @@ export function loadVoiceConfig(env: Record<string, string | undefined> = proces
     }
   }
 
+  const sttModel = env['VOICE_STT_MODEL']?.trim() || 'deepgram/nova-3';
   const llmModel = env['VOICE_LLM_MODEL']?.trim() || 'google/gemini-2.5-flash';
-  assertRoutable(llmProvider, llmModel);
+  // cartesia/sonic-3 rather than elevenlabs: Inference does not serve
+  // elevenlabs at all, so the old default could never have worked.
+  const ttsModel = env['VOICE_TTS_MODEL']?.trim() || 'cartesia/sonic-3';
+
+  assertRoutable('stt', sttProvider, sttModel);
+  assertRoutable('llm', llmProvider, llmModel);
+  assertRoutable('tts', ttsProvider, ttsModel);
 
   return {
     livekit: {
@@ -113,7 +165,7 @@ export function loadVoiceConfig(env: Record<string, string | undefined> = proces
     language: env['VOICE_LANGUAGE']?.trim() || 'en',
     stt: {
       provider: sttProvider,
-      model: env['VOICE_STT_MODEL']?.trim() || 'deepgram/nova-3',
+      model: sttModel,
     },
     llm: {
       provider: llmProvider,
@@ -122,7 +174,7 @@ export function loadVoiceConfig(env: Record<string, string | undefined> = proces
     },
     tts: {
       provider: ttsProvider,
-      model: env['VOICE_TTS_MODEL']?.trim() || 'elevenlabs/eleven_flash_v2_5',
+      model: ttsModel,
       voice: env['VOICE_TTS_VOICE']?.trim() || null,
     },
     vadProvider: 'silero',
