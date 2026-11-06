@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { INFERENCE_VENDORS, loadVoiceConfig } from '../src/voice/config.js';
+import {
+  INFERENCE_VENDORS,
+  resolveInitializeProcessTimeout,
+  loadVoiceConfig,
+} from '../src/voice/config.js';
 
 const BASE = {
   LIVEKIT_URL: 'wss://p.livekit.cloud',
@@ -186,5 +190,29 @@ describe('loadVoiceConfig', () => {
   it('carries the agent name, because naming it disables automatic dispatch', () => {
     expect(loadVoiceConfig({ ...BASE, LIVEKIT_AGENT_NAME: 'ticket-agent' }).agentName)
       .toBe('ticket-agent');
+  });
+});
+
+/**
+ * The job subprocess must signal ready within this window or the worker logs
+ * "runner initialization timed out" and no agent ever joins the room. Our
+ * prewarm loads Silero's ONNX model in that window, and the SDK's 10s default
+ * is not enough on a loaded laptop or on a first run that still has to fetch
+ * the model file — observed on Windows while the watchdog was reporting
+ * 100-300ms host stalls.
+ */
+describe('resolveInitializeProcessTimeout', () => {
+  it('allows far more than the SDK default of 10s, which prewarm overruns', () => {
+    expect(resolveInitializeProcessTimeout({})).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it('is overridable for a slower machine', () => {
+    expect(resolveInitializeProcessTimeout({ AGENT_INIT_TIMEOUT_MS: '120000' })).toBe(120_000);
+  });
+
+  it('ignores a value that is not a positive number rather than disabling the timeout', () => {
+    expect(resolveInitializeProcessTimeout({ AGENT_INIT_TIMEOUT_MS: 'soon' })).toBeGreaterThanOrEqual(60_000);
+    expect(resolveInitializeProcessTimeout({ AGENT_INIT_TIMEOUT_MS: '0' })).toBeGreaterThanOrEqual(60_000);
+    expect(resolveInitializeProcessTimeout({ AGENT_INIT_TIMEOUT_MS: '-5' })).toBeGreaterThanOrEqual(60_000);
   });
 });

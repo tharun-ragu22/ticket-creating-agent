@@ -128,6 +128,29 @@ schema:
 To use Claude, call it directly instead: `VOICE_LLM_PROVIDER=anthropic` with
 `ANTHROPIC_API_KEY`.
 
+### "runner initialization timed out" and no agent joins
+
+The job subprocess has `initializeProcessTimeout` to signal ready, and
+`prewarm` loads Silero's ONNX model inside that window. The SDK allows 10s,
+which is not enough on a machine under load or on a first run that still has to
+fetch the model, so the worker logs:
+
+```
+ERROR  error launching job   requestId: "AJ_..."
+       err: "runner initialization timed out"  (ipc/supervised_proc.ts)
+```
+
+From the caller's side this is indistinguishable from a dispatch problem, but
+it is the opposite: a `requestId` means LiveKit offered the job and the worker
+accepted it, so registration and the `agentName` match are both fine.
+
+The worker now allows 60s, overridable with `AGENT_INIT_TIMEOUT_MS`. Cache the
+model ahead of the first call rather than fetching it during one:
+
+```bash
+pnpm --filter @tca/agent download-files
+```
+
 ## Known environment trap: Linux reading Windows files
 
 Under WSL2, a repo on a Windows drive (`/mnt/c`, or anything reported as a `9p`

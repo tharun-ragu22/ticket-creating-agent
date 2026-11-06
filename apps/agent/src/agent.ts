@@ -13,7 +13,7 @@ import { AgentApiClient } from './api/agent-api.js';
 import { createAgents } from './agents.js';
 import { ApiTranscriptRecorder, NullEventSink, RoomEventSink } from './session/events.js';
 import { createCallUserData, type CallEventSink, type CallUserData } from './session/state.js';
-import { loadVoiceConfig } from './voice/config.js';
+import { loadVoiceConfig, resolveInitializeProcessTimeout } from './voice/config.js';
 import { buildVoiceStack } from './voice/stack.js';
 
 /** The attribute the API puts on the caller's token. */
@@ -151,5 +151,11 @@ cli.runApp(
     // roomConfig.agents[0].agentName must match this exactly or the agent
     // never joins a room.
     agentName: process.env['LIVEKIT_AGENT_NAME'] ?? 'ticket-agent',
+    // prewarm loads Silero inside this window; the SDK's 10s default is not
+    // enough on a loaded machine and the job then dies with "runner
+    // initialization timed out", never reaching the room. Run
+    // `pnpm --filter @tca/agent download-files` once so the model is cached
+    // before the first call rather than fetched during it.
+    initializeProcessTimeout: resolveInitializeProcessTimeout(),
   }),
 );

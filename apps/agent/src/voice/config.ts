@@ -98,6 +98,35 @@ function assertRoutable(stage: Stage, provider: string, model: string): void {
   );
 }
 
+/** The SDK's own default, which prewarm cannot reliably meet. */
+const SDK_INITIALIZE_TIMEOUT_MS = 10_000;
+
+/** Ours: generous enough to load Silero on a loaded machine or a cold cache. */
+const INITIALIZE_TIMEOUT_MS = 60_000;
+
+/**
+ * How long the job subprocess has to signal ready.
+ *
+ * prewarm loads Silero's ONNX model inside this window. The SDK allows
+ * ${SDK_INITIALIZE_TIMEOUT_MS}ms, which is not enough on a machine under load
+ * or on a first run that still has to fetch the model file; the worker then
+ * logs "runner initialization timed out" and no agent joins the room at all,
+ * which looks identical to a dispatch problem from the caller's side.
+ *
+ * Raising a timeout is normally the wrong instinct, but the work here is a
+ * genuine one-off model load, and the cost of being wrong is asymmetric: too
+ * low means the agent never arrives, while too high only delays the error
+ * message for a job that was already broken.
+ */
+export function resolveInitializeProcessTimeout(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const raw = Number(env['AGENT_INIT_TIMEOUT_MS']?.trim());
+  if (!Number.isFinite(raw) || raw <= 0) return INITIALIZE_TIMEOUT_MS;
+
+  return Math.max(raw, SDK_INITIALIZE_TIMEOUT_MS);
+}
+
 /**
  * Parses the voice stack out of the environment.
  *

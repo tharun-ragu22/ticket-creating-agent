@@ -10,7 +10,8 @@
     "start": "node --env-file-if-exists=../../.env --import tsx src/agent.ts start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "download-files": "node --env-file-if-exists=../../.env --import tsx src/agent.ts download-files"
   },
   "dependencies": {
     "@livekit/agents": "^1.9.5",
