@@ -29,5 +29,12 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "exports": {
+    ".": "./src/agent.ts",
+    "./agents": "./src/agents.ts",
+    "./state": "./src/session/state.ts",
+    "./tools": "./src/tools/index.ts",
+    "./voice-config": "./src/voice/config.ts"
   }
 }

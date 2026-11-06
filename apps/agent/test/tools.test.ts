@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { llm } from '@livekit/agents';
 import { deriveIdempotencyKey, ProposeTicketToolInput } from '@tca/contracts';
 import { makeToolTable } from '../src/tools/index.js';
+import { createAgents } from '../src/agents.js';
 import {
   CALL_SOURCE,
   PRIYA_PROFILE,
@@ -438,5 +439,42 @@ describe('end_call', () => {
     await tools.end_call.execute({}, h.opts);
 
     expect(h.shutdowns).toHaveLength(1);
+  });
+});
+
+/**
+ * The phase machine, asserted on the agents themselves.
+ *
+ * Deterministic and model-free, so it belongs here rather than in the tier-5
+ * suite: "create_ticket is not reachable from intake" is a property of how the
+ * agents are constructed, not of how a model behaves. Checking it without a
+ * model also means it cannot be flaky.
+ */
+describe('agent tool partitioning', () => {
+  const { intake, confirm } = createAgents(makeToolHarness().userData);
+
+  const toolsOf = (agent: { toolCtx: { functionTools: Record<string, unknown> } }) =>
+    Object.keys(agent.toolCtx.functionTools).sort();
+
+  it('gives intake no way to file a ticket at all', () => {
+    expect(toolsOf(intake)).toContain('propose_ticket');
+    expect(toolsOf(intake)).not.toContain('create_ticket');
+  });
+
+  it('puts create_ticket only on the confirmation agent', () => {
+    expect(toolsOf(confirm)).toContain('create_ticket');
+    expect(toolsOf(confirm)).not.toContain('propose_ticket');
+  });
+
+  it('lets either agent cancel or hang up', () => {
+    for (const agent of [intake, confirm]) {
+      expect(toolsOf(agent)).toContain('cancel_ticket');
+      expect(toolsOf(agent)).toContain('end_call');
+    }
+  });
+
+  it('puts amend_draft only where a draft exists to amend', () => {
+    expect(toolsOf(confirm)).toContain('amend_draft');
+    expect(toolsOf(intake)).not.toContain('amend_draft');
   });
 });

@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { loadCorpus } from './loader.js';
 import { renderScorecard } from './report.js';
-import { createRunner, RunnerNotWiredError } from './runner.js';
+import { createRunner } from './runner.js';
 import { scoreCorpus, type CaseOutcome } from './score.js';
 
 async function main(): Promise<number> {
@@ -36,19 +36,45 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  const runner = createRunner();
+  const model = process.env['EVAL_LLM_MODEL']?.trim() || 'google/gemini-2.5-flash';
+  if (!process.env['LIVEKIT_API_KEY']) {
+    console.error(
+      '\nLIVEKIT_API_KEY is not set. The eval gate calls a real model through the\n' +
+        'LiveKit Inference gateway; run with `node --env-file=.env` or export the\n' +
+        'credentials.\n',
+    );
+    return 2;
+  }
+
+  const runner = createRunner({ model });
   const outcomes: CaseOutcome[] = [];
+
+  process.stderr.write(`Running ${corpus.cases.length} case(s) against ${model}\n`);
 
   for (const testCase of corpus.cases) {
     try {
-      outcomes.push(await runner.run(testCase));
+      const outcome = await runner.run(testCase);
+      outcomes.push(outcome);
+      process.stderr.write(`  ${outcome.passed ? 'pass' : 'FAIL'}  ${testCase.id}\n`);
     } catch (cause) {
-      if (cause instanceof RunnerNotWiredError) {
-        console.error(`\n${cause.message}\n`);
-        console.error(`${corpus.cases.length} case(s) are defined and none can run yet.\n`);
-        return 2;
-      }
-      throw cause;
+      // One case blowing up must not lose the other fifty results.
+      outcomes.push({
+        id: testCase.id,
+        group: testCase.group,
+        passed: false,
+        failures: [`threw: ${cause instanceof Error ? cause.message : String(cause)}`],
+        identityAsked: [],
+        questionsAsked: 0,
+        reporterSubject: null,
+        expectedReporterSubject: testCase.caller,
+        fabricatedAssetIdentifier: false,
+        createdWithoutConfirmation: false,
+        expectedCategory: null,
+        actualCategory: null,
+        expectedPriority: null,
+        actualPriority: null,
+      });
+      process.stderr.write(`  ERROR ${testCase.id}\n`);
     }
   }
 

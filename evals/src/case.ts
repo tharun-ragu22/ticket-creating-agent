@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { NeverAsk } from '@tca/contracts';
 
 export const EvalGroup = z.enum([
   'identity',
@@ -13,16 +14,11 @@ export const EvalGroup = z.enum([
 ]);
 export type EvalGroup = z.infer<typeof EvalGroup>;
 
-/** Identity fields the agent already has and must therefore never ask for. */
-export const NeverAsk = z.enum([
-  'name',
-  'email',
-  'department',
-  'location',
-  'employee_id',
-  'phone',
-]);
-export type NeverAsk = z.infer<typeof NeverAsk>;
+// NeverAsk and the patterns that detect a request for one of those fields
+// live in @tca/contracts, so the tier-5 suite and this scored gate cannot
+// disagree about what counts as asking.
+export { NeverAsk } from '@tca/contracts';
+export type { NeverAsk as NeverAskField } from '@tca/contracts';
 
 export const EvalTurn = z.object({
   user: z.string().min(1),
