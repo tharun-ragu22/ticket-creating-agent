@@ -5,6 +5,11 @@ export {
   INTERACT_OPEN_QUESTIONS,
 } from './synergy-interact/synergy-interact.js';
 export {
+  TicketApiClient,
+  TicketApiError,
+  type TicketApiClientOptions,
+} from './http/api-client.js';
+export {
   createTicketProvider,
   type TicketProviderConfig,
   type TicketProviderName,

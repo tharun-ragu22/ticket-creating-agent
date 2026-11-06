@@ -467,3 +467,68 @@ describe('GET /v1/ticket-schema', () => {
       .toBe(401);
   });
 });
+
+/**
+ * The lookup that lets TicketApiClient satisfy findByIdempotencyKey, and the
+ * one a resuming agent uses to discover a ticket it may already have filed
+ * before a worker restart.
+ */
+describe('GET /v1/tickets/by-idempotency-key/:key', () => {
+  let api: TestApi;
+  beforeAll(async () => { api = await buildTestApi(); });
+  afterAll(async () => { await api?.close(); });
+
+  it('returns the ticket created under that key', async () => {
+    const created = await api.app.inject({
+      method: 'POST',
+      url: '/v1/tickets',
+      headers: { ...bearer(api.serviceToken), 'idempotency-key': 'lookup-key-000000000001' },
+      payload: body({ reporterSubject: 'priya' }),
+    });
+
+    const res = await api.app.inject({
+      method: 'GET',
+      url: '/v1/tickets/by-idempotency-key/lookup-key-000000000001',
+      headers: bearer(api.serviceToken),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().id).toBe(created.json().id);
+  });
+
+  it('404s an unknown key', async () => {
+    const res = await api.app.inject({
+      method: 'GET',
+      url: '/v1/tickets/by-idempotency-key/never-used-key-0000000',
+      headers: bearer(api.serviceToken),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  /** The key is derived from room, subject and start time; it is not a secret,
+   *  but a caller who could probe it could enumerate other people's calls. */
+  it('403s a caller token', async () => {
+    const res = await api.app.inject({
+      method: 'GET',
+      url: '/v1/tickets/by-idempotency-key/lookup-key-000000000001',
+      headers: bearer(await api.callerToken('priya')),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('does not shadow GET /v1/tickets/:id', async () => {
+    const created = await api.app.inject({
+      method: 'POST',
+      url: '/v1/tickets',
+      headers: { ...bearer(api.serviceToken), 'idempotency-key': 'no-shadow-00000000000001' },
+      payload: body({ reporterSubject: 'priya' }),
+    });
+
+    const res = await api.app.inject({
+      method: 'GET',
+      url: `/v1/tickets/${created.json().id}`,
+      headers: bearer(api.serviceToken),
+    });
+    expect(res.statusCode).toBe(200);
+  });
+});

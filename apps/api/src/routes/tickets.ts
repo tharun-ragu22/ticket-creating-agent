@@ -12,7 +12,7 @@ import {
   type ProviderCallContext,
   type TicketQuery,
 } from '@tca/contracts';
-import type { Principal } from '../auth/principal.js';
+import { requireService, type Principal } from '../auth/principal.js';
 import { BadRequestError } from '../errors.js';
 import type { ApiDeps } from '../app.js';
 
@@ -95,6 +95,31 @@ export function registerTicketRoutes(app: FastifyInstance, deps: ApiDeps): void 
 
     return deps.ticketProvider.listTickets(query, contextFor(request));
   });
+
+  /**
+   * Service-only. This is how TicketApiClient satisfies
+   * findByIdempotencyKey, and how a worker that restarted mid-call discovers
+   * the ticket it may already have filed.
+   *
+   * Registered before /v1/tickets/:id for readability only — the paths differ
+   * in segment count, so there is no shadowing either way. A test pins that.
+   */
+  app.get<{ Params: { key: string } }>(
+    '/v1/tickets/by-idempotency-key/:key',
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      // A caller must not be able to probe these. The key is derived from room,
+      // subject and start time, so probing it would enumerate other people's
+      // calls.
+      requireService(request.principal);
+
+      const ticket = await deps.ticketProvider.findByIdempotencyKey(
+        request.params.key,
+        contextFor(request),
+      );
+      return ticket ? ticket : reply.code(404).send({ error: 'not_found' });
+    },
+  );
 
   app.get<{ Params: { id: string } }>(
     '/v1/tickets/:id',

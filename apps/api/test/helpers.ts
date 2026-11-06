@@ -37,6 +37,12 @@ export interface TestApi {
   /** An app JWT for a seeded demo user, as the mobile app would hold. */
   callerToken(subject: string): Promise<string>;
   serviceToken: string;
+  /**
+   * Incoming x-request-id header -> URL, for asserting that a client
+   * propagated its trace id. Fastify refuses addHook after ready(), so the
+   * hook has to be installed here rather than in a test.
+   */
+  requestLog: Map<string, string>;
   close(): Promise<void>;
 }
 
@@ -58,12 +64,18 @@ export async function buildTestApi(
   const config: ApiConfig = { ...TEST_CONFIG, ...over };
   const provider = new DemoTicketProvider(sql);
 
+  const requestLog = new Map<string, string>();
+
   const app = await buildApp({
     config,
     ticketProvider: provider,
     identityProvider: new DemoJwtIdentityProvider(config.demoJwtSecret),
     directory: new SqlCallerDirectory(sql, provider),
     transcripts: new SqlTranscriptStore(sql),
+  });
+  app.addHook('onRequest', async (request) => {
+    const id = request.headers['x-request-id'];
+    if (typeof id === 'string') requestLog.set(id, request.url);
   });
   await app.ready();
 
@@ -73,6 +85,7 @@ export async function buildTestApi(
     provider,
     callerToken: (subject: string) => signDemoToken(config.demoJwtSecret, { subject }),
     serviceToken: config.serviceToken,
+    requestLog,
     close: async () => {
       await app.close();
       await teardown();
