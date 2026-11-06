@@ -9,10 +9,12 @@ import type { ApiConfig } from './config.js';
 import { UnauthenticatedError } from './auth/demo-jwt.js';
 import { CallerNotFoundError, type ApiCallerDirectory } from './auth/directory.js';
 import { ForbiddenError } from './auth/principal.js';
+import { BadRequestError } from './errors.js';
 import { registerAuth } from './auth/plugin.js';
 import type { TranscriptStore } from './db/transcripts.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerConnectionDetails } from './routes/connection-details.js';
+import { registerTicketRoutes } from './routes/tickets.js';
 
 export interface ApiDeps {
   config: ApiConfig;
@@ -39,6 +41,9 @@ export async function buildApp(deps: ApiDeps): Promise<FastifyInstance> {
     }
     if (error instanceof CallerNotFoundError) {
       return reply.code(404).send({ error: 'not_found', detail: error.message });
+    }
+    if (error instanceof BadRequestError) {
+      return reply.code(400).send({ error: 'bad_request', detail: error.message });
     }
     if (error instanceof ZodError) {
       return reply.code(400).send({ error: 'bad_request', issues: error.issues });
@@ -71,6 +76,7 @@ export async function buildApp(deps: ApiDeps): Promise<FastifyInstance> {
 
   registerAuthRoutes(app, deps);
   registerConnectionDetails(app, deps);
+  registerTicketRoutes(app, deps);
 
   return app;
 }
