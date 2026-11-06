@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadVoiceConfig } from '../src/voice/config.js';
+import { INFERENCE_VENDORS, loadVoiceConfig } from '../src/voice/config.js';
 
 const BASE = {
   LIVEKIT_URL: 'wss://p.livekit.cloud',
@@ -67,10 +67,23 @@ describe('loadVoiceConfig', () => {
       ).toThrow(/cartesia/);
     });
 
-    it('defaults TTS to a model the gateway actually serves', () => {
+    /**
+     * The default shipped as elevenlabs/eleven_flash_v2_5, which the gateway
+     * cannot serve, so the out-of-the-box config could never speak. Asserting
+     * against the served list rather than a literal keeps this true if the
+     * model is retuned for latency later.
+     */
+    it('defaults every stage to a vendor the gateway actually serves', () => {
       const config = loadVoiceConfig(BASE);
 
-      expect(config.tts.model.startsWith('cartesia/')).toBe(true);
+      for (const [stage, model] of [
+        ['stt', config.stt.model],
+        ['llm', config.llm.model],
+        ['tts', config.tts.model],
+      ] as const) {
+        const vendor = model.slice(0, model.indexOf('/'));
+        expect(INFERENCE_VENDORS[stage]).toContain(vendor);
+      }
     });
 
     it('refuses an unserved STT vendor too', () => {

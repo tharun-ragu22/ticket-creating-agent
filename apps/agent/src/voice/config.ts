@@ -48,7 +48,7 @@ export interface VoiceConfig {
  *
  * Re-read these lists when bumping @livekit/agents; new vendors get added.
  */
-const INFERENCE_VENDORS = {
+export const INFERENCE_VENDORS = {
   stt: ['assemblyai', 'cartesia', 'deepgram', 'google', 'inworld', 'speechmatics', 'xai'],
   llm: ['deepseek-ai', 'google', 'moonshotai', 'openai', 'xai', 'zai'],
   tts: ['assemblyai', 'cartesia', 'deepgram', 'fishaudio', 'inworld', 'rime', 'xai'],
@@ -147,9 +147,12 @@ export function loadVoiceConfig(env: Record<string, string | undefined> = proces
 
   const sttModel = env['VOICE_STT_MODEL']?.trim() || 'deepgram/nova-3';
   const llmModel = env['VOICE_LLM_MODEL']?.trim() || 'google/gemini-2.5-flash';
-  // cartesia/sonic-3 rather than elevenlabs: Inference does not serve
-  // elevenlabs at all, so the old default could never have worked.
-  const ttsModel = env['VOICE_TTS_MODEL']?.trim() || 'cartesia/sonic-3';
+  // deepgram/aura-2 rather than elevenlabs, which Inference does not serve at
+  // all. Chosen on measured time-to-first-audio through the gateway, since the
+  // whole mouth-to-ear budget is ~900ms: aura-2 230ms, inworld-tts-1.5 215ms,
+  // rime/mistv2 396ms, cartesia/sonic-3 786ms. Deepgram is also already the
+  // STT vendor, so this adds no new one.
+  const ttsModel = env['VOICE_TTS_MODEL']?.trim() || 'deepgram/aura-2';
 
   assertRoutable('stt', sttProvider, sttModel);
   assertRoutable('llm', llmProvider, llmModel);

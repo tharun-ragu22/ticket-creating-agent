@@ -90,6 +90,23 @@ Two live calls were lost to this before the check existed — `anthropic` on the
 LLM side, `elevenlabs` on the TTS side, the latter being the repo's own former
 default. Re-read those unions when bumping `@livekit/agents`.
 
+Measured through the gateway on 2026-11-06, one sample each, synthesising the
+same sentence — time to first audio frame, which is the slice of the ~900 ms
+mouth-to-ear budget that TTS owns:
+
+| TTS model | First audio | Frames |
+|---|---|---|
+| `inworld/inworld-tts-1.5` | 215 ms | 39 |
+| `deepgram/aura-2` | 230 ms | 38 |
+| `rime/mistv2` | 396 ms | 35 |
+| `cartesia/sonic-3` | 786 ms | 27 |
+| `elevenlabs/eleven_flash_v2_5` | **zero frames in 4.5 s** | 0 |
+
+`deepgram/aura-2` is the default: fast, and Deepgram is already the STT vendor.
+The ElevenLabs row is the signature to recognise — the server event is
+literally `{"type":"error"}` with no message field, which is why the SDK logs
+`LiveKit TTS returned error: undefined`.
+
 ### Anthropic is the confusing one: accepted, then silent
 
 Measured against the live gateway on 2026-11-05: a request for
