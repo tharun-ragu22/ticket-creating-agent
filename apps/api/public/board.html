@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticket board — demo</title>
+<!--
+  Demo scaffolding. No build step, no framework, no dev server: one file the
+  API serves, so it is the observation window for the agent from the first
+  phase onward. It is expected to be deleted once Synergy Interact is wired up.
+-->
+<style>
+  :root {
+    --bg: #11141a; --panel: #181c24; --line: #262c38;
+    --text: #e6e9ef; --muted: #8b94a6; --accent: #6ea8fe;
+    --low: #4b5563; --normal: #2f6feb; --high: #c2771a; --urgent: #c2392b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 16px 20px; border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .meta { color: var(--muted); font-size: 12px; }
+  main { padding: 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted); font-weight: 600;
+    padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  tbody tr.row { cursor: pointer; border-bottom: 1px solid var(--line); }
+  tbody tr.row:hover { background: var(--panel); }
+  td { padding: 10px; vertical-align: top; }
+  td.ref { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--accent); white-space: nowrap; }
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; color: #fff;
+  }
+  .p-low { background: var(--low); } .p-normal { background: var(--normal); }
+  .p-high { background: var(--high); } .p-urgent { background: var(--urgent); }
+  .detail td { background: var(--panel); padding: 14px 16px; }
+  .detail h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase;
+               letter-spacing: .06em; color: var(--muted); }
+  .detail p { margin: 0 0 14px; white-space: pre-wrap; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px;
+        margin: 0 0 14px; color: var(--muted); }
+  .kv b { color: var(--text); font-weight: 500; }
+  .turns { margin: 0; max-height: 260px; overflow: auto; }
+  .turn { display: grid; grid-template-columns: 56px 1fr; gap: 10px; padding: 2px 0; }
+  .turn span { color: var(--muted); font-size: 12px; }
+  .empty, .error { color: var(--muted); padding: 24px 10px; }
+  .error { color: #e58b80; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ticket board</h1>
+  <span class="meta" id="status">loading…</span>
+  <span class="meta">demo only — click a row for detail</span>
+</header>
+<main>
+  <table>
+    <thead>
+      <tr>
+        <th>Ref</th><th>Title</th><th>Reporter</th>
+        <th>Category</th><th>Priority</th><th>Status</th><th>Created</th>
+      </tr>
+    </thead>
+    <tbody id="rows"><tr><td colspan="7" class="empty">loading…</td></tr></tbody>
+  </table>
+</main>
+
+<script type="module">
+const rows = document.getElementById('rows');
+const status = document.getElementById('status');
+const expanded = new Set();
+const transcripts = new Map();
+
+const esc = (v) =>
+  String(v ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+const time = (iso) => new Date(iso).toLocaleString();
+
+function detailRow(t) {
+  const a = t.affectedAsset;
+  const tr = transcripts.get(t.transcriptRef?.id);
+
+  return `<tr class="detail"><td colspan="7">
+    <h3>Description</h3><p>${esc(t.description)}</p>
+    <div class="kv">
+      <span>Reporter</span><b>${esc(t.reporter.displayName)} &lt;${esc(t.reporter.email)}&gt;</b>
+      <span>Department</span><b>${esc(t.reporter.department ?? '—')}</b>
+      <span>Location</span><b>${esc(t.reporter.location ?? '—')}</b>
+      <span>Asset</span><b>${a ? `${esc(a.label)} (${esc(a.identifier ?? 'not on record')})` : '—'}</b>
+      <span>Impact</span><b>${esc(t.impact.scope)}, ${t.impact.usersAffected ?? '?'} affected,
+        ${t.impact.workBlocked ? 'work blocked' : 'workaround available'}</b>
+      <span>Tried</span><b>${t.troubleshootingTried.length ? esc(t.troubleshootingTried.join('; ')) : '—'}</b>
+      <span>Room</span><b>${esc(t.source.roomName)}</b>
+    </div>
+    ${t.comments.length ? `<h3>Comments</h3><p>${t.comments.map((c) => esc(c.body)).join('\n')}</p>` : ''}
+    <h3>Transcript</h3>
+    ${tr
+      ? `<div class="turns">${tr.turns
+          .map((x) => `<div class="turn"><span>${esc(x.role)}</span><div>${esc(x.text)}</div></div>`)
+          .join('')}</div>`
+      : `<p>${t.transcriptRef ? 'loading…' : 'none attached'}</p>`}
+  </td></tr>`;
+}
+
+function render(items) {
+  if (!items.length) {
+    rows.innerHTML = '<tr><td colspan="7" class="empty">No tickets yet. Start a call.</td></tr>';
+    return;
+  }
+
+  rows.innerHTML = items
+    .map((t) => {
+      const head = `<tr class="row" data-id="${esc(t.id)}">
+        <td class="ref">${esc(t.providerTicketId)}</td>
+        <td>${esc(t.title)}</td>
+        <td>${esc(t.reporter.displayName)}</td>
+        <td>${esc(t.category)}</td>
+        <td><span class="pill p-${esc(t.priority)}">${esc(t.priority)}</span></td>
+        <td>${esc(t.status)}</td>
+        <td>${esc(time(t.createdAt))}</td>
+      </tr>`;
+      return expanded.has(t.id) ? head + detailRow(t) : head;
+    })
+    .join('');
+}
+
+let latest = [];
+
+rows.addEventListener('click', async (event) => {
+  const row = event.target.closest('tr.row');
+  if (!row) return;
+
+  const id = row.dataset.id;
+  expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+  render(latest);
+
+  const ticket = latest.find((t) => t.id === id);
+  const refId = ticket?.transcriptRef?.id;
+  if (!expanded.has(id) || !refId || transcripts.has(refId)) return;
+
+  try {
+    const res = await fetch(`/v1/board/transcripts/${encodeURIComponent(refId)}`);
+    if (res.ok) {
+      transcripts.set(refId, await res.json());
+      render(latest);
+    }
+  } catch { /* the next poll will try again */ }
+});
+
+async function poll() {
+  try {
+    const res = await fetch('/v1/board/tickets');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    latest = (await res.json()).items;
+    render(latest);
+    status.textContent = `${latest.length} ticket(s) · updated ${new Date().toLocaleTimeString()}`;
+  } catch (cause) {
+    status.textContent = `API unreachable: ${cause.message}`;
+    if (!latest.length) {
+      rows.innerHTML = `<tr><td colspan="7" class="error">Cannot reach the API. Is it running?</td></tr>`;
+    }
+  }
+}
+
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>

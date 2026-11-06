@@ -1,4 +1,7 @@
-export { describeTicketProviderContract, type ProviderHarness } from './contract.js';
+// NOTE: describeTicketProviderContract is deliberately NOT re-exported here.
+// It imports vitest at module scope, so a barrel export would pull the test
+// framework into every runtime that imports this package — which crashes the
+// API at boot. Test suites import it from '@tca/ticket-providers/contract-tests'.
 export { DemoTicketProvider, migrate } from './demo/demo-provider.js';
 export {
   SynergyInteractProvider,

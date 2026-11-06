@@ -17,6 +17,7 @@ import { registerConnectionDetails } from './routes/connection-details.js';
 import { registerTicketRoutes } from './routes/tickets.js';
 import { registerTranscriptRoutes } from './routes/transcripts.js';
 import { registerUserRoutes } from './routes/users.js';
+import { registerBoard } from './routes/board.js';
 
 export interface ApiDeps {
   config: ApiConfig;
@@ -81,6 +82,7 @@ export async function buildApp(deps: ApiDeps): Promise<FastifyInstance> {
   registerTicketRoutes(app, deps);
   registerTranscriptRoutes(app, deps);
   registerUserRoutes(app, deps);
+  registerBoard(app, deps);
 
   return app;
 }

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeCreateTicketInput } from '@tca/test-helpers';
-import { describeTicketProviderContract, TicketApiClient } from '@tca/ticket-providers';
+import { TicketApiClient } from '@tca/ticket-providers';
+import { describeTicketProviderContract } from '@tca/ticket-providers/contract-tests';
 import type { ProviderCallContext } from '@tca/contracts';
 import { buildTestApi, type TestApi } from './helpers.js';
 

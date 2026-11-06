@@ -14,9 +14,10 @@
     "eval": "pnpm --filter @tca/evals run eval"
   },
   "devDependencies": {
+    "@types/node": "^22.18.8",
+    "tsx": "^4.23.15",
     "turbo": "^2.5.8",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4",
-    "@types/node": "^22.18.8"
+    "vitest": "^3.2.4"
   }
 }
