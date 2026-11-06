@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { inference, initializeLogger, voice } from '@livekit/agents';
-import { asksForIdentity, type NeverAsk } from '@tca/contracts';
+import { asksForIdentity, derivePriority, type NeverAsk } from '@tca/contracts';
 import { createAgents } from '../src/agents.js';
 import { makeToolHarness, VALID_DRAFT, type ToolHarness } from './helpers.js';
 import type { CallUserData } from '../src/session/state.js';
@@ -132,10 +132,22 @@ describeBehaviour('IntakeAgent reaching a proposal', () => {
     expect(fixture.harness.userData.draft).not.toBeNull();
   });
 
-  it('derived the priority rather than taking the models word for it', () => {
-    // Blocked plus colleagues affected: high. The model is free to ask for
-    // anything; derivePriority decides (EV-PRI-01).
-    expect(fixture.harness.userData.draft?.draft.priority).toBe('high');
+  /**
+   * The invariant, not a specific band.
+   *
+   * An earlier version asserted `high`, which held only if the model consumed
+   * enough turns to hear "two colleagues" before proposing. Tightening the
+   * prompt made it propose sooner, so it recorded scope: self and derived
+   * `normal` — correct for the facts it had, but the test failed. Asserting
+   * the band couples this test to the model's pacing; asserting that the
+   * priority matches the recorded impact is the property that actually
+   * matters, and it holds whenever it proposes. The specific bands are
+   * covered by group C in the corpus, where the turns are fixed.
+   */
+  it('derived the priority from the impact it recorded, not from its own judgement', () => {
+    const draft = fixture.harness.userData.draft?.draft;
+    expect(draft).toBeDefined();
+    expect(draft?.priority).toBe(derivePriority(draft!.impact, draft!.category));
     expect(fixture.harness.userData.draft?.proposedAt).toBeTruthy();
   });
 

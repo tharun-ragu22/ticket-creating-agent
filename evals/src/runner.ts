@@ -61,6 +61,8 @@ export function createRunner(options: RunnerOptions): Runner {
       /** The read-back and confirmation turns, which are not intake questions. */
       const spokenAfterProposal: string[] = [];
       let proposed = false;
+      /** The agent ended the call; the session is closing. */
+      let hungUp = false;
 
       try {
         await session.start({ agent: intake });
@@ -85,6 +87,11 @@ export function createRunner(options: RunnerOptions): Runner {
             if (e.type === 'function_call' && e.item?.name) {
               toolCalls.push(e.item.name);
               if (e.item.name === 'propose_ticket') proposed = true;
+              // end_call shuts the session down. Feeding another turn after
+              // that throws "AgentSession is closing", which EV-DUP-01 hit:
+              // the agent commented on the existing ticket and hung up, and
+              // the runner kept talking to a closed session.
+              if (e.item.name === 'end_call') hungUp = true;
             }
 
             if (e.type === 'message' && e.item?.role === 'assistant') {
@@ -95,6 +102,7 @@ export function createRunner(options: RunnerOptions): Runner {
 
         let wentQuiet = false;
         for (const turn of testCase.turns) {
+          if (hungUp) break;
           collect(await session.run({ userInput: turn.user }).wait());
 
           // A silent caller is the end of the call, not another prompt.
@@ -127,7 +135,7 @@ export function createRunner(options: RunnerOptions): Runner {
           ];
 
           for (const userInput of closers) {
-            if (provider.ticket) break;
+            if (hungUp || provider.ticket) break;
             if (countQuestions(spoken) > testCase.expect.maxQuestions) break;
             collect(await session.run({ userInput }).wait());
           }
