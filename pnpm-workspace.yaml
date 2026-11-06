@@ -1,0 +1,9 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - 'evals'
+
+# pnpm 12 blocks dependency build scripts until allowlisted. esbuild (via
+# vitest) needs its postinstall to place the platform binary.
+allowBuilds:
+  esbuild: true

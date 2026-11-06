@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.turbo/
+.env
+.env.local
+*.log
+coverage/
+.expo/
+ios/
+android/
+.turbo/
