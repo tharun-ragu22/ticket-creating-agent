@@ -19,6 +19,7 @@
     "@livekit/agents-plugin-deepgram": "^1.9.5",
     "@livekit/agents-plugin-elevenlabs": "^1.9.5",
     "@livekit/agents-plugin-silero": "^1.9.5",
+    "@livekit/rtc-node": "^1.2.1",
     "@tca/contracts": "workspace:*",
     "@tca/ticket-providers": "workspace:*",
     "zod": "^4.6.7"

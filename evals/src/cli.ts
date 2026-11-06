@@ -36,7 +36,11 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  const model = process.env['EVAL_LLM_MODEL']?.trim() || 'google/gemini-2.5-flash';
+  // The agent runs on the PRODUCTION model: a scored run exists to tell you
+  // how the thing you ship behaves. EVAL_LLM_MODEL is the small cheap model
+  // used for judging, and running the agent on it measures the wrong thing.
+  const model = process.env['VOICE_LLM_MODEL']?.trim() || 'google/gemini-2.5-flash';
+  const judgeModel = process.env['EVAL_LLM_MODEL']?.trim() || model;
   if (!process.env['LIVEKIT_API_KEY']) {
     console.error(
       '\nLIVEKIT_API_KEY is not set. The eval gate calls a real model through the\n' +
@@ -46,7 +50,7 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  const runner = createRunner({ model });
+  const runner = createRunner({ model, judgeModel });
   const outcomes: CaseOutcome[] = [];
 
   process.stderr.write(`Running ${corpus.cases.length} case(s) against ${model}\n`);
