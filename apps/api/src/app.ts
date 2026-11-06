@@ -15,6 +15,8 @@ import type { TranscriptStore } from './db/transcripts.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerConnectionDetails } from './routes/connection-details.js';
 import { registerTicketRoutes } from './routes/tickets.js';
+import { registerTranscriptRoutes } from './routes/transcripts.js';
+import { registerUserRoutes } from './routes/users.js';
 
 export interface ApiDeps {
   config: ApiConfig;
@@ -77,6 +79,8 @@ export async function buildApp(deps: ApiDeps): Promise<FastifyInstance> {
   registerAuthRoutes(app, deps);
   registerConnectionDetails(app, deps);
   registerTicketRoutes(app, deps);
+  registerTranscriptRoutes(app, deps);
+  registerUserRoutes(app, deps);
 
   return app;
 }
