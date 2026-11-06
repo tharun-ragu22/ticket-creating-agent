@@ -41,6 +41,42 @@ pnpm eval --list # the behavioural spec: 53 cases
 pnpm eval        # tier 6, real model (not wired until phase 6)
 ```
 
+## The voice stack
+
+Every stage defaults to **LiveKit Inference**, which authenticates with the
+LiveKit credentials the project already has — so the whole thing runs with no
+vendor keys:
+
+```ini
+VOICE_STT_PROVIDER=inference
+VOICE_LLM_PROVIDER=inference
+VOICE_TTS_PROVIDER=inference
+```
+
+A direct plugin is selected per stage and must bring its own key, checked at
+startup rather than on the first word of the first call.
+
+### Anthropic is not served by Inference, and fails silently
+
+Measured against the live gateway on 2026-11-05: a request for
+`anthropic/claude-sonnet-4-6` — or bare `claude-sonnet-4-6` — is **accepted**,
+returns **no error**, and streams **zero chunks**. The agent connects,
+transcribes, and never speaks, with nothing in the logs to explain it.
+
+`loadVoiceConfig` refuses the combination at startup for that reason. Confirmed
+working through the gateway, all handling tool calls with the nested ticket
+schema:
+
+| Model | First token |
+|---|---|
+| `google/gemini-2.5-flash` | ~190 ms |
+| `google/gemini-3-flash` | ~1.6 s (with tools) |
+| `google/gemma-4-31b-it` | ~140 ms |
+| `openai/gpt-4.1-mini` | ~460 ms |
+
+To use Claude, call it directly instead: `VOICE_LLM_PROVIDER=anthropic` with
+`ANTHROPIC_API_KEY`.
+
 ## Known environment trap: clone onto the Linux filesystem
 
 Under WSL2, a repo on a Windows drive (`/mnt/c`, or anything reported as a `9p`
@@ -58,6 +94,10 @@ syscalls per module than a plain read. It is not the package and not vitest.
 
 Clone into the WSL filesystem (`~/src/...`) rather than a Windows path and this
 disappears. It does not affect CI or a native Linux/macOS machine.
+
+The same cost is why the agent **worker** cannot be smoke-tested on this mount:
+importing `@livekit/agents-plugin-silero` alone takes minutes, so the process
+never reaches its first log line.
 
 > Caveat: I could not complete the control experiment — copying `node_modules`
 > to the local overlay filesystem broke pnpm's symlink layout — so the
