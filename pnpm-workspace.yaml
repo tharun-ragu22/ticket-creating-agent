@@ -6,4 +6,7 @@ packages:
 # pnpm 12 blocks dependency build scripts until allowlisted. esbuild (via
 # vitest) needs its postinstall to place the platform binary.
 allowBuilds:
+  '@livekit/blingfire': true
+  '@livekit/local-inference': true
   esbuild: true
+  onnxruntime-node: true

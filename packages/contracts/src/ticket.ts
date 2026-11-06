@@ -69,6 +69,7 @@ export const CallSource = z.object({
 export type CallSource = z.infer<typeof CallSource>;
 
 export const TranscriptRef = z.object({ id: z.string().min(1), uri: z.string().min(1) });
+export type TranscriptRef = z.infer<typeof TranscriptRef>;
 
 /**
  * The schema the LLM is allowed to fill in.

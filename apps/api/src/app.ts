@@ -4,6 +4,7 @@ import {
   NotImplementedError,
   type IdentityProvider,
   type TicketProvider,
+  type TranscriptStore,
 } from '@tca/contracts';
 import type { ApiConfig } from './config.js';
 import { UnauthenticatedError } from './auth/demo-jwt.js';
@@ -11,7 +12,6 @@ import { CallerNotFoundError, type ApiCallerDirectory } from './auth/directory.j
 import { ForbiddenError } from './auth/principal.js';
 import { BadRequestError } from './errors.js';
 import { registerAuth } from './auth/plugin.js';
-import type { TranscriptStore } from './db/transcripts.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerConnectionDetails } from './routes/connection-details.js';
 import { registerTicketRoutes } from './routes/tickets.js';

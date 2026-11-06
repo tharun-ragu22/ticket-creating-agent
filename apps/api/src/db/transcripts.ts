@@ -1,32 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { SqlClient } from '@tca/contracts';
+import {
+  TranscriptTurn,
+  type CreateTranscriptInput,
+  type SqlClient,
+  type StoredTranscript,
+  type TranscriptStore,
+} from '@tca/contracts';
 
-export const TranscriptTurn = z.object({
-  role: z.enum(['caller', 'agent']),
-  text: z.string().min(1),
-  at: z.iso.datetime(),
-});
-export type TranscriptTurn = z.infer<typeof TranscriptTurn>;
-
-export const CreateTranscriptInput = z.object({
-  roomName: z.string().min(1),
-  sessionId: z.string().min(1),
-  callerSubject: z.string().min(1),
-  turns: z.array(TranscriptTurn).min(1),
-});
-export type CreateTranscriptInput = z.infer<typeof CreateTranscriptInput>;
-
-export interface StoredTranscript extends CreateTranscriptInput {
-  id: string;
-  createdAt: string;
-}
-
-export interface TranscriptStore {
-  create(input: CreateTranscriptInput): Promise<StoredTranscript>;
-  get(id: string): Promise<StoredTranscript | null>;
-  findByRoom(roomName: string): Promise<StoredTranscript | null>;
-}
+export { CreateTranscriptInput } from '@tca/contracts';
 
 export class SqlTranscriptStore implements TranscriptStore {
   constructor(private readonly sql: SqlClient) {}
