@@ -30,7 +30,12 @@ export class TicketApiError extends Error {
   }
 }
 
-const DEFAULT_TIMEOUT_MS = 10_000;
+/**
+ * Generous for the same reason as AgentApiClient's: describeSchema runs
+ * immediately after the profile lookup when a call starts, so a slow answer
+ * here also ends the call before the caller hears anything.
+ */
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
  * The TicketProvider the agent actually uses.
