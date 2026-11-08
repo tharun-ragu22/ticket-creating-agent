@@ -1,4 +1,4 @@
-import { llm, type voice } from '@livekit/agents';
+import { llm, log, type voice } from '@livekit/agents';
 import { z } from 'zod';
 import {
   CreateTicketInput,
@@ -170,8 +170,28 @@ function makeCreateTicket() {
           reason: cause instanceof Error ? cause.message : 'unknown error',
         });
 
+        /*
+         * Logged with the real cause, because the ToolError below deliberately
+         * replaces it. Without this line the only trace of a failed filing is
+         * the framework's "exception occurred while executing tool", carrying
+         * the generic message — so "it ran into issues on the backend" is all
+         * anyone ever sees, on the call and in the log, and the status code or
+         * timeout that actually caused it is gone.
+         */
+        log().error(
+          {
+            err: cause,
+            room: data.source.roomName,
+            caller: data.profile.subject,
+            idempotencyKey: input.idempotencyKey,
+          },
+          'filing the ticket failed',
+        );
+
         // The worst failure mode of this product is telling a caller their
-        // problem is logged when it is not. No reference number appears here.
+        // problem is logged when it is not. No reference number appears here,
+        // and the cause is kept out of the model's view so it cannot be read
+        // aloud to the caller.
         throw new llm.ToolError(
           'Filing the ticket failed. Tell the caller it did not go through and that ' +
             'they should try again shortly. Do not give them a reference number.',
@@ -196,7 +216,9 @@ function makeCreateTicket() {
 const spokenConfirmation = (providerTicketId: string): string =>
   `Filed as ${formatTicketRefForSpeech(providerTicketId)}. ` +
   `Read that reference back to the caller one character at a time: ` +
-  `${formatTicketRefForSpeech(providerTicketId)}.`;
+  `${formatTicketRefForSpeech(providerTicketId)}. ` +
+  `Then tell them what happens next and ask whether there is anything else. ` +
+  `Do not end the call yet.`;
 
 // ── amend_draft ─────────────────────────────────────────────────────────────
 
@@ -258,8 +280,10 @@ function makeEndCall() {
   return llm.tool({
     name: 'end_call',
     description:
-      'Hang up. Only once the ticket is filed and you have given the caller the ' +
-      'reference, or once they have decided they do not want one.',
+      'Hang up. Use it when the caller has said goodbye or said there is nothing ' +
+      'else, or when they have stayed off topic across several turns despite being ' +
+      'steered back. Filing a ticket is NOT a reason to hang up on its own: ask ' +
+      'whether there is anything else and wait for the answer.',
     execute: async (_args, { ctx }) => {
       const data = callData(ctx);
 

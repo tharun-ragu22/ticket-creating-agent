@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   INFERENCE_VENDORS,
+  resolveIdleProcesses,
   resolveInitializeProcessTimeout,
   loadVoiceConfig,
 } from '../src/voice/config.js';
@@ -214,5 +215,30 @@ describe('resolveInitializeProcessTimeout', () => {
     expect(resolveInitializeProcessTimeout({ AGENT_INIT_TIMEOUT_MS: 'soon' })).toBeGreaterThanOrEqual(60_000);
     expect(resolveInitializeProcessTimeout({ AGENT_INIT_TIMEOUT_MS: '0' })).toBeGreaterThanOrEqual(60_000);
     expect(resolveInitializeProcessTimeout({ AGENT_INIT_TIMEOUT_MS: '-5' })).toBeGreaterThanOrEqual(60_000);
+  });
+});
+
+describe('resolveIdleProcesses', () => {
+  /**
+   * The SDK keeps none warm in dev mode, which puts the whole cold start —
+   * tsx, every plugin import, the Silero load — between the caller tapping
+   * Call and the greeting. Measured at 8.5s on a demo call.
+   */
+  it('keeps at least one process warm, unlike the SDK default in dev mode', () => {
+    expect(resolveIdleProcesses({})).toBeGreaterThanOrEqual(1);
+  });
+
+  it('is overridable for a machine with memory to spare', () => {
+    expect(resolveIdleProcesses({ AGENT_IDLE_PROCESSES: '3' })).toBe(3);
+  });
+
+  it('falls back rather than accepting a value the SDK would silently replace', () => {
+    // The SDK stores `numIdleProcesses || default`, so 0 would revert to its
+    // own — 0 under dev but min(cores, 4) under start. Same behaviour in both
+    // modes is worth more than honouring a value that cannot be expressed.
+    expect(resolveIdleProcesses({ AGENT_IDLE_PROCESSES: '0' })).toBeGreaterThanOrEqual(1);
+    expect(resolveIdleProcesses({ AGENT_IDLE_PROCESSES: '-1' })).toBeGreaterThanOrEqual(1);
+    expect(resolveIdleProcesses({ AGENT_IDLE_PROCESSES: '1.5' })).toBeGreaterThanOrEqual(1);
+    expect(resolveIdleProcesses({ AGENT_IDLE_PROCESSES: 'lots' })).toBeGreaterThanOrEqual(1);
   });
 });

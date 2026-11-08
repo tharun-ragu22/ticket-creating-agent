@@ -13,7 +13,11 @@ import { AgentApiClient } from './api/agent-api.js';
 import { createAgents } from './agents.js';
 import { ApiTranscriptRecorder, NullEventSink, RoomEventSink } from './session/events.js';
 import { createCallUserData, type CallEventSink, type CallUserData } from './session/state.js';
-import { loadVoiceConfig, resolveInitializeProcessTimeout } from './voice/config.js';
+import {
+  loadVoiceConfig,
+  resolveIdleProcesses,
+  resolveInitializeProcessTimeout,
+} from './voice/config.js';
 import { buildVoiceStack } from './voice/stack.js';
 
 /** The attribute the API puts on the caller's token. */
@@ -170,5 +174,8 @@ cli.runApp(
     // `pnpm --filter @tca/agent download-files` once so the model is cached
     // before the first call rather than fetched during it.
     initializeProcessTimeout: resolveInitializeProcessTimeout(),
+    // Without this the greeting arrives ~10s after the caller taps Call, and
+    // 8.5s of that is forking and warming this process. See resolveIdleProcesses.
+    numIdleProcesses: resolveIdleProcesses(),
   }),
 );

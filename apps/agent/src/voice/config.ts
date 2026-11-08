@@ -101,6 +101,42 @@ function assertRoutable(stage: Stage, provider: string, model: string): void {
 /** The SDK's own default, which prewarm cannot reliably meet. */
 const SDK_INITIALIZE_TIMEOUT_MS = 10_000;
 
+/**
+ * How many prewarmed job processes to keep idle.
+ *
+ * The SDK's default is `min(cores, 4)` in production and **0 in dev mode**, and
+ * 0 means every call forks a cold process first: load tsx, import every plugin,
+ * load Silero, then start. Measured on a demo call, that was 8.5 seconds
+ * between "received job request" and "initializing job runner" — before the
+ * entry function ran a single line, so no amount of work on the profile fetch
+ * or the voice stack can touch it.
+ *
+ * One is right for a demo: a second concurrent call still gets served, it just
+ * pays the cold start the first call no longer does. Raise it to match expected
+ * concurrency, at roughly a Node process and one Silero model each.
+ */
+const IDLE_PROCESSES = 1;
+
+/**
+ * Keeps the greeting off the critical path of process startup.
+ *
+ * Overridable because the memory cost is per process and a laptop running the
+ * API, the agent and Metro at once may not want several.
+ */
+export function resolveIdleProcesses(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const raw = Number(env['AGENT_IDLE_PROCESSES']?.trim());
+  if (!Number.isInteger(raw) || raw < 1) return IDLE_PROCESSES;
+
+  // Note there is no way to ask for none: the SDK stores
+  // `numIdleProcesses || Default.numIdleProcesses(production)`, so a 0 reverts
+  // to its default — which is 0 in dev but min(cores, 4) under `start`. Values
+  // below 1 therefore fall back to ours, where at least the behaviour is the
+  // same in both modes.
+  return raw;
+}
+
 /** Ours: generous enough to load Silero on a loaded machine or a cold cache. */
 const INITIALIZE_TIMEOUT_MS = 60_000;
 

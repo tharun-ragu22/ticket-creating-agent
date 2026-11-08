@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { llm } from '@livekit/agents';
+import { llm, initializeLogger } from '@livekit/agents';
 import { deriveIdempotencyKey, ProposeTicketToolInput } from '@tca/contracts';
 import { makeToolTable } from '../src/tools/index.js';
 import { createAgents } from '../src/agents.js';
@@ -12,6 +12,11 @@ import {
   makeToolHarness,
   type ToolHarness,
 } from './helpers.js';
+
+// create_ticket logs the real cause of a filing failure, and the SDK's log()
+// throws if no logger exists. behaviour.test.ts does the same for its own
+// session; vitest isolates files, so each one needs it.
+initializeLogger({ pretty: false, level: 'silent' });
 
 const tools = makeToolTable({
   confirmAgent: () => STUB_AGENT,
