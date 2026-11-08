@@ -1,0 +1,42 @@
+{
+  "name": "@tca/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios --device",
+    "prebuild": "expo prebuild --clean",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@livekit/react-native": "^3.1.0",
+    "@livekit/react-native-webrtc": "^150.1.1",
+    "@tca/contracts": "workspace:*",
+    "expo": "^58.0.23",
+    "expo-constants": "~58.0.15",
+    "expo-dev-client": "~58.0.18",
+    "expo-router": "~58.0.30",
+    "expo-status-bar": "~58.0.4",
+    "livekit-client": "^2.23.0",
+    "react": "^19.3.0",
+    "react-native": "0.88.1",
+    "react-native-safe-area-context": "^5.11.1",
+    "react-native-screens": "^4.30.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@config-plugins/react-native-webrtc": "^15.0.2",
+    "@livekit/react-native-expo-plugin": "^1.1.0",
+    "@testing-library/react-native": "^14.1.0",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^19.1.1",
+    "jest": "^30.2.0",
+    "jest-expo": "~58.0.14",
+    "test-renderer": "^1.3.1",
+    "typescript": "^5.9.3"
+  }
+}

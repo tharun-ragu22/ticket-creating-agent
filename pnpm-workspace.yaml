@@ -9,4 +9,7 @@ allowBuilds:
   '@livekit/blingfire': true
   '@livekit/local-inference': true
   esbuild: true
+  # Metro's native file watcher. Without it Metro falls back to a much
+  # slower JS watcher, which is felt on every save during mobile dev.
+  '@parcel/watcher': true
   onnxruntime-node: true
