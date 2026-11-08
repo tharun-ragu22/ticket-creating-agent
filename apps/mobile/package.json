@@ -4,10 +4,13 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "expo start --dev-client",
     "android": "expo run:android",
+    "build:android": "eas build --platform android --profile development",
+    "build:ios": "eas build --platform ios --profile development",
+    "device:register": "eas device:create",
     "ios": "expo run:ios --device",
     "prebuild": "expo prebuild --clean",
+    "start": "expo start --dev-client",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit"

@@ -12,11 +12,15 @@
       "bundleIdentifier": "com.synergyit.ticketagent",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "The IT desk needs your microphone so you can describe the problem out loud.",
-        "UIBackgroundModes": ["audio", "voip"],
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ],
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
-      }
+      },
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.synergyit.ticketagent",
@@ -29,7 +33,8 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MICROPHONE",
         "android.permission.BLUETOOTH_CONNECT"
-      ]
+      ],
+      "versionCode": 1
     },
     "plugins": [
       "expo-router",
