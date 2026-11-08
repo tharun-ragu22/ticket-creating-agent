@@ -63,8 +63,4 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   }
 };
 
-// Printed once at startup, so "my config is not being loaded" is never a
-// guess. Remove when the bundle is green.
-console.log('[metro.config] loaded; watching', workspacePackages);
-
 module.exports = config;

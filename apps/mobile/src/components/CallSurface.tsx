@@ -42,6 +42,19 @@ export function CallSurface({ onEnd }: { onEnd: () => void }): React.JSX.Element
         </Text>
       </View>
 
+      {/*
+        No agent participant has joined, and the room itself is healthy — which
+        looks identical to a slow connection and is almost always a worker that
+        is not running. The room name is here so it can be matched against the
+        worker's log line for the job.
+      */}
+      {state === 'disconnected' && elapsed >= AGENT_JOIN_GRACE_SECONDS ? (
+        <Text style={styles.micWarning}>
+          No agent has joined {room.name} after {elapsed}s. Start the worker with
+          {'\n'}pnpm --filter @tca/agent dev
+        </Text>
+      ) : null}
+
       <DraftCard state={ticket} />
 
       {/*
@@ -92,6 +105,23 @@ function useElapsed(): number {
 const formatElapsed = (seconds: number): string =>
   `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
+/**
+ * How long to wait before saying the agent is missing.
+ *
+ * Dispatch plus the worker's prewarm is a second or two on a warm machine and
+ * longer on a cold one, so this is generous enough never to cry wolf.
+ */
+const AGENT_JOIN_GRACE_SECONDS = 8;
+
+/**
+ * The agent's state in words.
+ *
+ * `disconnected` is called out separately rather than folded into a default
+ * branch: useVoiceAssistant's legacy lifecycle is disconnected → connecting →
+ * initializing → listening, so a room with no agent in it never leaves the
+ * first state, and labelling that "connecting" sends you looking at the
+ * network when the worker is simply not running.
+ */
 function describe(state: string): string {
   switch (state) {
     case 'speaking':
@@ -99,9 +129,17 @@ function describe(state: string): string {
     case 'thinking':
       return 'thinking';
     case 'listening':
+    case 'pre-connect-buffering':
       return 'listening';
-    default:
+    case 'initializing':
+    case 'idle':
+      return 'agent starting';
+    case 'connecting':
       return 'connecting';
+    case 'failed':
+      return 'the agent failed to join';
+    default:
+      return 'waiting for the agent';
   }
 }
 
