@@ -10,3 +10,8 @@ ios/
 android/
 .turbo/
 data/
+
+# Session scaffolding: local notes for picking work back up. Deliberately not
+# committed — it carries machine paths, account identifiers and working notes
+# that have no business in a shared repo.
+.claude/handoff.md
