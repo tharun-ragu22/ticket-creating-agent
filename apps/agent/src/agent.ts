@@ -50,11 +50,24 @@ export default defineAgent({
     });
 
     const subject = await resolveCallerSubject(ctx);
+
+    /*
+     * Logged, because this is the one stretch of the call with no observable
+     * output. Everything from here to session.say() is two HTTP round trips to
+     * our API, and AgentApiClient retries three times over 30s each — so an
+     * API the agent cannot reach looks exactly like an agent that joined and
+     * said nothing, for 90 seconds, with an empty worker log. Naming the URL
+     * is the whole point: it is the value a wrong TICKET_API_URL would show.
+     */
+    log().info({ subject, api: config.api.url }, 'fetching caller profile');
+    const startupAt = Date.now();
+
     const profile = await api.fetchProfile(subject);
     const schema = await tickets.describeSchema({
       actor: { subject, email: profile.email, displayName: profile.displayName },
       requestId: `job_${ctx.job.id}`,
     });
+    log().info({ elapsedMs: Date.now() - startupAt }, 'caller profile and schema loaded');
 
     const roomName = ctx.room.name ?? `console-${Date.now()}`;
     const startedAt = new Date().toISOString();
