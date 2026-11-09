@@ -1,6 +1,7 @@
 import { createTicketProvider, migrate } from '@tca/ticket-providers';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { isLoopbackOnly, reachableUrls } from './net.js';
 import { DemoJwtIdentityProvider } from './auth/demo-jwt.js';
 import { SqlCallerDirectory } from './auth/directory.js';
 import { createSqlClient } from './db/client.js';
@@ -52,10 +53,30 @@ async function main(): Promise<void> {
   }
 
   await app.listen({ host: config.host, port: config.port });
+
+  /*
+   * reachableAt, not just the configured base URL. The mobile app derives its
+   * API host from whichever machine served the bundle, so the question when it
+   * cannot sign in is always "does that address appear here?" — and the old
+   * line answered with API_PUBLIC_BASE_URL, a string that says 127.0.0.1 no
+   * matter what the socket is bound to.
+   */
   app.log.info(
-    { ticketProvider: ticketProvider.name, board: `${config.publicBaseUrl}/board` },
+    {
+      ticketProvider: ticketProvider.name,
+      board: `${config.publicBaseUrl}/board`,
+      reachableAt: reachableUrls(config.host, config.port),
+    },
     'API ready',
   );
+
+  if (isLoopbackOnly(config.host)) {
+    app.log.warn(
+      { host: config.host },
+      'API_HOST is loopback, so nothing off this machine can reach the API — ' +
+        'a phone will time out signing in. Set API_HOST=0.0.0.0.',
+    );
+  }
 }
 
 main().catch((error: unknown) => {
