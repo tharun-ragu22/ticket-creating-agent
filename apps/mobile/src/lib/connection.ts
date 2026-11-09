@@ -40,6 +40,51 @@ export interface DemoSession {
 }
 
 /**
+ * How long to wait for our API before calling it unreachable.
+ *
+ * iOS waits 60 seconds by default, which on a phone is indistinguishable from
+ * an app that is simply broken. A dev API on the same network answers in
+ * milliseconds, so anything past this is not slow, it is not there.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * fetch, with the URL in the failure.
+ *
+ * React Native reports an unreachable host as a bare "Network request failed"
+ * or "The request timed out", naming nothing — and this app derives its API
+ * base from whichever host served the bundle, so the one fact that separates
+ * "the API is down" from "the phone is asking the wrong machine" is exactly
+ * the fact the error leaves out. A loopback API_HOST, a stale
+ * EXPO_PUBLIC_API_BASE_URL and a firewall all present identically without it.
+ */
+async function request(
+  url: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetchImpl(url, { ...init, signal: abort.signal });
+  } catch (cause) {
+    const reason = abort.signal.aborted
+      ? `no response in ${REQUEST_TIMEOUT_MS / 1000}s`
+      : cause instanceof Error
+        ? cause.message
+        : String(cause);
+
+    throw new Error(
+      `Could not reach the API at ${url} — ${reason}. Check that it is running, ` +
+        'and that API_HOST is 0.0.0.0: a loopback bind is unreachable from a phone.',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Credentials for one call.
  *
  * The body is empty on purpose. The agent is dispatched when the room is
@@ -51,14 +96,18 @@ export async function fetchConnectionDetails(
   session: ApiSession,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ConnectionDetails> {
-  const response = await fetchImpl(`${trimSlash(session.baseUrl)}/v1/connection-details`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${session.accessToken}`,
-      'content-type': 'application/json',
+  const response = await request(
+    `${trimSlash(session.baseUrl)}/v1/connection-details`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${session.accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({}),
     },
-    body: JSON.stringify({}),
-  });
+    fetchImpl,
+  );
 
   if (!response.ok) {
     if (response.status === 401) {
@@ -98,11 +147,15 @@ export async function signInDemo(
   subject: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DemoSession> {
-  const response = await fetchImpl(`${trimSlash(baseUrl)}/v1/auth/demo-login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ subject }),
-  });
+  const response = await request(
+    `${trimSlash(baseUrl)}/v1/auth/demo-login`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ subject }),
+    },
+    fetchImpl,
+  );
 
   if (!response.ok) {
     throw new Error(

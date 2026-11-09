@@ -130,3 +130,69 @@ describe('signInDemo', () => {
     ).rejects.toThrow(/nobody|not found|404/i);
   });
 });
+
+/**
+ * The failure the demo actually hits. React Native's own message names no URL,
+ * so an API bound to 127.0.0.1 and an app pointed at the wrong host are the
+ * same two words on screen.
+ */
+describe('an unreachable API', () => {
+  it('names the URL it tried when the transport fails', async () => {
+    await expect(
+      signInDemo(
+        'http://192.168.1.50:8080',
+        'priya',
+        (async () => {
+          throw new TypeError('Network request failed');
+        }) as unknown as typeof fetch,
+      ),
+    ).rejects.toThrow('http://192.168.1.50:8080/v1/auth/demo-login');
+  });
+
+  it('points at the loopback bind, since that is the usual cause', async () => {
+    await expect(
+      signInDemo(
+        'http://192.168.1.50:8080',
+        'priya',
+        (async () => {
+          throw new TypeError('Network request failed');
+        }) as unknown as typeof fetch,
+      ),
+    ).rejects.toThrow(/API_HOST is 0\.0\.0\.0/);
+  });
+
+  it('gives up rather than waiting out the platform timeout', async () => {
+    jest.useFakeTimers();
+
+    // Never settles and never aborts itself: only the helper's own timer can
+    // end this, which is the behaviour under test.
+    const hang = signInDemo(
+      'http://192.168.1.50:8080',
+      'priya',
+      ((_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('Aborted')));
+        })) as unknown as typeof fetch,
+    );
+
+    const assertion = expect(hang).rejects.toThrow(/no response in 10s/);
+    await jest.advanceTimersByTimeAsync(10_000);
+    await assertion;
+
+    jest.useRealTimers();
+  });
+
+  it('passes the abort signal through to fetch', async () => {
+    let seen: RequestInit | undefined;
+
+    await fetchConnectionDetails(
+      { baseUrl: 'http://127.0.0.1:8080', accessToken: 'app-jwt' },
+      (async (_url: string, init?: RequestInit) => {
+        seen = init;
+        return { ok: true, status: 200, json: async () => CONNECTION };
+      }) as unknown as typeof fetch,
+    );
+
+    expect(seen?.signal).toBeInstanceOf(AbortSignal);
+  });
+});
