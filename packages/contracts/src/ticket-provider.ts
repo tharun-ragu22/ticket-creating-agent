@@ -40,7 +40,16 @@ export interface Page<T> {
 export interface TicketProvider {
   readonly name: string;
   createTicket(input: CreateTicketInput, ctx: ProviderCallContext): Promise<Ticket>;
-  getTicket(id: string, ctx: ProviderCallContext): Promise<Ticket | null>;
+  /**
+   * By internal id **or** by the providerTicketId the provider issued.
+   *
+   * Both, because the agent only ever holds the latter — OpenTicketRef carries
+   * providerTicketId alone, so that no tool argument can name a ticket by a
+   * handle the caller was never given — and it is also the reference read back
+   * on the call. An implementation that resolves only its private id makes
+   * commenting unreachable. The contract suite pins this.
+   */
+  getTicket(ref: string, ctx: ProviderCallContext): Promise<Ticket | null>;
   /**
    * On the interface because a real ITSM may not honour an Idempotency-Key
    * header. If Interact does not, its adapter satisfies this from a local
@@ -48,7 +57,8 @@ export interface TicketProvider {
    */
   findByIdempotencyKey(key: string, ctx: ProviderCallContext): Promise<Ticket | null>;
   listTickets(query: TicketQuery, ctx: ProviderCallContext): Promise<Page<Ticket>>;
-  addComment(id: string, body: string, ctx: ProviderCallContext): Promise<void>;
+  /** Accepts either reference, as getTicket does. Rejects one that matches nothing. */
+  addComment(ref: string, body: string, ctx: ProviderCallContext): Promise<void>;
   describeSchema(ctx: ProviderCallContext): Promise<TicketSchemaDescriptor>;
   healthCheck(): Promise<{ ok: boolean; detail?: string }>;
 }

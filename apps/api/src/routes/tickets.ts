@@ -223,6 +223,14 @@ function scopeSubject(principal: Principal, requested: string | undefined): stri
  * Returns null — and so a 404 — rather than a 403 for someone else's ticket.
  * A 403 confirms the id exists, which is itself a disclosure.
  */
+/**
+ * The ticket this request may see, by id or by provider reference.
+ *
+ * Which one arrives is the provider's problem, not this route's — see
+ * TicketProvider.getTicket. The authorisation below is unchanged either way: a
+ * caller still only ever reads their own, so accepting the reference widens
+ * what can be named, not who can read it.
+ */
 async function readableTicket(
   request: FastifyRequest<{ Params: { id: string } }>,
   deps: ApiDeps,

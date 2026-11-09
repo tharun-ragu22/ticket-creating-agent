@@ -132,6 +132,33 @@ export function describeTicketProviderContract(
       expect(fetched?.title).toBe(created.title);
     });
 
+    /*
+     * The reference, not only the internal id. It is the one identifier the
+     * agent ever holds — OpenTicketRef carries providerTicketId alone — and the
+     * one the caller repeats back, so a provider that resolves only its private
+     * id makes comment_on_existing_ticket unreachable: every append 404s while
+     * the caller is told their detail was added.
+     */
+    it('getTicket resolves the reference it issued, not only the internal id', async () => {
+      const created = await provider.createTicket(makeCreateTicketInput(), ctx);
+      const fetched = await provider.getTicket(created.providerTicketId, ctx);
+
+      expect(fetched?.id).toBe(created.id);
+      expect(fetched?.providerTicketId).toBe(created.providerTicketId);
+    });
+
+    it('addComment accepts that same reference', async () => {
+      const created = await provider.createTicket(makeCreateTicketInput(), ctx);
+      await provider.addComment(created.providerTicketId, 'Caller added a detail.', ctx);
+
+      const fetched = await provider.getTicket(created.id, ctx);
+      expect(fetched?.comments.map((c) => c.body)).toContain('Caller added a detail.');
+    });
+
+    it('addComment rejects a reference that matches nothing, rather than dropping it', async () => {
+      await expect(provider.addComment('SI-00000000', 'into the void', ctx)).rejects.toThrow();
+    });
+
     it('getTicket returns null for an unknown id', async () => {
       expect(await provider.getTicket('no-such-ticket', ctx)).toBeNull();
     });

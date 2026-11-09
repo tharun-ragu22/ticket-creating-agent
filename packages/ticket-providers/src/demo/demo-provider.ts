@@ -118,8 +118,21 @@ export class DemoTicketProvider implements TicketProvider {
     );
   }
 
-  async getTicket(id: string, _ctx: ProviderCallContext): Promise<Ticket | null> {
-    const { rows } = await this.sql.query<TicketRow>(`SELECT * FROM tickets WHERE id = $1`, [id]);
+  /**
+   * Resolves either reference, and must.
+   *
+   * The agent never sees an internal id: OpenTicketRef carries
+   * providerTicketId and nothing else, deliberately, and the reference read
+   * back to the caller is the one they repeat on the next call. Matching only
+   * `id` made every append 404 — the agent would agree to add a detail and the
+   * detail went nowhere. Both columns are text and ticket_number is unique, so
+   * there is nothing to disambiguate.
+   */
+  async getTicket(ref: string, _ctx: ProviderCallContext): Promise<Ticket | null> {
+    const { rows } = await this.sql.query<TicketRow>(
+      `SELECT * FROM tickets WHERE id = $1 OR ticket_number = $1`,
+      [ref],
+    );
     const row = rows[0];
     if (!row) return null;
 
@@ -180,7 +193,18 @@ export class DemoTicketProvider implements TicketProvider {
     };
   }
 
-  async addComment(id: string, body: string, ctx: ProviderCallContext): Promise<void> {
+  /** Takes either reference too, for the reason getTicket does. */
+  async addComment(ref: string, body: string, ctx: ProviderCallContext): Promise<void> {
+    const { rows } = await this.sql.query<{ id: string }>(
+      `SELECT id FROM tickets WHERE id = $1 OR ticket_number = $1`,
+      [ref],
+    );
+    const id = rows[0]?.id;
+
+    // Loud, because the alternative is a comment that silently lands nowhere
+    // while the caller is told it was added.
+    if (!id) throw new Error(`addComment: no ticket matches ${ref}`);
+
     await this.sql.query(
       `INSERT INTO ticket_comments (id, ticket_id, author_subject, body) VALUES ($1, $2, $3, $4)`,
       [randomUUID(), id, ctx.actor.subject, body],
