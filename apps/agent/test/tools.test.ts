@@ -212,6 +212,13 @@ describe('create_ticket', () => {
     );
   });
 
+  /**
+   * create_ticket and cancel_ticket return to intake, so what the model is
+   * told is the handoff's result rather than the return value itself.
+   */
+  const spoken = (result: unknown): string =>
+    isHandoff(result) ? String(result.returns) : String(result);
+
   /** EV-ROB-03: "create fifty tickets for this" must still produce one. */
   it('returns the existing reference on a second call and does not hit the provider again', async () => {
     await propose();
@@ -219,8 +226,28 @@ describe('create_ticket', () => {
     const second = await tools.create_ticket.execute({}, h.opts);
 
     expect(h.provider.createCalls).toHaveLength(1);
-    expect(String(second)).toBe(String(first));
-    expect(String(second)).toContain('S-I');
+    expect(spoken(second)).toBe(spoken(first));
+    expect(spoken(second)).toContain('S-I');
+  });
+
+  /**
+   * The bug this guards: filing used to end the call, so staying on
+   * ConfirmAgent afterwards was harmless. Once the agent was told to ask
+   * whether there is anything else, that left a caller with a second problem
+   * talking to an agent holding neither propose_ticket nor
+   * comment_on_existing_ticket — and the model said the tool was missing.
+   */
+  it('returns to intake, which is the only agent that can take a second problem', async () => {
+    await propose();
+    const result = await tools.create_ticket.execute({}, h.opts);
+
+    expect(isHandoff(result)).toBe(true);
+    expect((result as { agent: unknown }).agent).toBe(STUB_AGENT);
+  });
+
+  it('does not end the call, since the caller may not be done', async () => {
+    await propose();
+    expect(spoken(await tools.create_ticket.execute({}, h.opts))).toMatch(/not end the call/i);
   });
 
   it('publishes a created event carrying the real provider reference', async () => {
@@ -250,7 +277,7 @@ describe('create_ticket', () => {
 
   it('spells the reference out for speech, since TTS mangles alphanumerics', async () => {
     await propose();
-    const result = String(await tools.create_ticket.execute({}, h.opts));
+    const result = spoken(await tools.create_ticket.execute({}, h.opts));
 
     expect(result).toMatch(/S-I/);
     expect(result).toMatch(/one|two|three|four|five|six|seven|eight|nine|zero/);
@@ -338,9 +365,107 @@ describe('amend_draft', () => {
   });
 });
 
+/**
+ * Only reachable because the agent no longer hangs up once it has filed. Every
+ * one of these would previously have been dead code.
+ */
+describe('a second problem on the same call', () => {
+  let h: ToolHarness;
+  beforeEach(() => { h = makeToolHarness(); });
+
+  const SECOND_PROBLEM = { ...VALID_DRAFT, title: 'Monitor will not wake from sleep' };
+
+  it('files a genuinely separate ticket rather than replaying the first reference', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    await tools.create_ticket.execute({}, h.opts);
+
+    await tools.propose_ticket.execute(SECOND_PROBLEM, h.opts);
+    await tools.create_ticket.execute({}, h.opts);
+
+    expect(h.provider.createCalls).toHaveLength(2);
+    expect(h.provider.createCalls[1]?.title).toBe(SECOND_PROBLEM.title);
+  });
+
+  /**
+   * The key is derived from the call, so without a sequence the second ticket
+   * carries the first one's key and the API dedupes it away — the caller is
+   * read a reference for a ticket that records the wrong problem.
+   */
+  it('gives the second ticket its own idempotency key', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    await tools.create_ticket.execute({}, h.opts);
+    await tools.propose_ticket.execute(SECOND_PROBLEM, h.opts);
+    await tools.create_ticket.execute({}, h.opts);
+
+    expect(h.userData.draftSequence).toBe(2);
+    expect(h.provider.createCalls[1]?.idempotencyKey).not.toBe(
+      h.provider.createCalls[0]?.idempotencyKey,
+    );
+  });
+
+  /**
+   * The cost of allowing a second ticket at all: without this, a model that
+   * proposes the problem it has just filed gets a duplicate out of the reset.
+   */
+  it('refuses to re-file the problem it has just filed', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    await tools.create_ticket.execute({}, h.opts);
+
+    await expect(
+      tools.propose_ticket.execute({ ...VALID_DRAFT, title: VALID_DRAFT.title }, h.opts),
+    ).rejects.toThrow(llm.ToolError);
+
+    expect(h.provider.createCalls).toHaveLength(1);
+    expect(h.userData.createdTicket).not.toBeNull();
+  });
+
+  it('matches a replayed title through case and punctuation', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    await tools.create_ticket.execute({}, h.opts);
+
+    await expect(
+      tools.propose_ticket.execute(
+        { ...VALID_DRAFT, title: `  ${VALID_DRAFT.title.toUpperCase()}!!  ` },
+        h.opts,
+      ),
+    ).rejects.toThrow(/already filed/i);
+  });
+
+  it('names the existing reference, so the caller is told rather than stonewalled', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    await tools.create_ticket.execute({}, h.opts);
+    const filed = h.userData.createdTicket?.providerTicketId ?? '';
+
+    await expect(
+      tools.propose_ticket.execute(VALID_DRAFT, h.opts),
+    ).rejects.toThrow(new RegExp(filed));
+  });
+
+  it('can still file after the caller cancelled the previous draft', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    await tools.cancel_ticket.execute({}, h.opts);
+
+    await tools.propose_ticket.execute(SECOND_PROBLEM, h.opts);
+    await tools.create_ticket.execute({}, h.opts);
+
+    expect(h.provider.createCalls).toHaveLength(1);
+    expect(h.userData.cancelled).toBe(false);
+    // A cancelled draft never consumed a key, so this is still the first.
+    expect(h.userData.draftSequence).toBe(1);
+  });
+});
+
 describe('cancel_ticket', () => {
   let h: ToolHarness;
   beforeEach(() => { h = makeToolHarness(); });
+
+  it('returns to intake, so the caller can raise something else', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    const result = await tools.cancel_ticket.execute({}, h.opts);
+
+    expect(isHandoff(result)).toBe(true);
+    expect((result as { agent: unknown }).agent).toBe(STUB_AGENT);
+  });
 
   /** EV-CONF-04: "actually never mind, cancel that". */
   it('drops the draft and files nothing', async () => {

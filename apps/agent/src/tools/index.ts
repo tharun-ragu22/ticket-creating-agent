@@ -36,9 +36,9 @@ export interface ToolDeps {
 export function makeToolTable(deps: ToolDeps) {
   return {
     propose_ticket: makeProposeTicket(deps),
-    create_ticket: makeCreateTicket(),
+    create_ticket: makeCreateTicket(deps),
     amend_draft: makeAmendDraft(deps),
-    cancel_ticket: makeCancelTicket(),
+    cancel_ticket: makeCancelTicket(deps),
     lookup_known_assets: makeLookupKnownAssets(),
     comment_on_existing_ticket: makeCommentOnExisting(),
     end_call: makeEndCall(),
@@ -68,6 +68,36 @@ function makeProposeTicket(deps: ToolDeps) {
         );
       }
 
+      /*
+       * The replay, which must be caught before the reset below: a model
+       * re-proposing the problem it has just filed would otherwise clear the
+       * short-circuit and get a second ticket for it, which is the one outcome
+       * the whole duplicate defence exists to prevent. Nothing is stored on
+       * this path, so the filed ticket stays the only one.
+       */
+      if (data.createdTicket && sameProblem(parsed.data.title, data.createdTicket.title)) {
+        throw new llm.ToolError(
+          `That is already filed as ${data.createdTicket.providerTicketId}. Tell the ` +
+            'caller it is on record and ask whether there is a different problem.',
+        );
+      }
+
+      /*
+       * A proposal arriving after the previous draft reached an end — filed or
+       * cancelled — is the caller's second problem on the same call, which is
+       * now reachable because the agent no longer hangs up once it has filed.
+       * Both flags have to be cleared or create_ticket refuses: a set
+       * createdTicket makes it hand back the FIRST reference without filing
+       * anything, and a set cancelled makes it refuse outright. The sequence
+       * only moves for a ticket that was actually filed, since a cancelled
+       * draft never consumed an idempotency key.
+       */
+      if (data.createdTicket || data.cancelled) {
+        if (data.createdTicket) data.draftSequence += 1;
+        data.createdTicket = null;
+        data.cancelled = false;
+      }
+
       const draft: TicketDraft = {
         ...parsed.data,
         affectedAsset: groundAsset(parsed.data.affectedAsset, data),
@@ -88,6 +118,20 @@ function makeProposeTicket(deps: ToolDeps) {
 }
 
 /**
+ * Whether two drafts describe the problem that is already filed.
+ *
+ * Title only, compared the way a person would — case and punctuation are
+ * noise. Deliberately narrow: it catches the model proposing the same thing
+ * twice, which is what the reset in propose_ticket makes possible, and it will
+ * not catch a reworded replay. The provider's own idempotency key remains the
+ * layer that has to hold for that.
+ */
+const sameProblem = (a: string, b: string): boolean => normalize(a) === normalize(b);
+
+const normalize = (title: string): string =>
+  title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
  * Drops an asset tag the caller does not actually own.
  *
  * The prompt already forbids inventing one; this is the guard for when the
@@ -103,7 +147,7 @@ function groundAsset(asset: AffectedAsset | null, data: CallUserData): AffectedA
 
 // ── create_ticket ───────────────────────────────────────────────────────────
 
-function makeCreateTicket() {
+function makeCreateTicket(deps: ToolDeps) {
   return llm.tool({
     name: 'create_ticket',
     description:
@@ -118,7 +162,7 @@ function makeCreateTicket() {
       // Layer 2 of the duplicate defence: in-memory short-circuit. "Create
       // fifty tickets for this" gets one ticket and the same reference back.
       if (data.createdTicket) {
-        return spokenConfirmation(data.createdTicket.providerTicketId);
+        return handBack(deps, spokenConfirmation(data.createdTicket.providerTicketId));
       }
 
       if (data.cancelled) {
@@ -201,10 +245,24 @@ function makeCreateTicket() {
       data.createdTicket = ticket;
       await publish(data, { kind: 'ticket_created', ticket });
 
-      return spokenConfirmation(ticket.providerTicketId);
+      return handBack(deps, spokenConfirmation(ticket.providerTicketId));
     },
   });
 }
+
+/**
+ * Returns to intake once this draft is settled.
+ *
+ * Filing used to be the last thing that happened on a call, so staying on the
+ * confirmation agent afterwards cost nothing. Now the agent is told to ask
+ * whether there is anything else — and ConfirmAgent holds only create_ticket,
+ * amend_draft, cancel_ticket and end_call. It carries the full system prompt,
+ * which names propose_ticket and comment_on_existing_ticket, so a caller with
+ * a second problem got the model reaching for a tool it did not have and
+ * saying so out loud. Anything after "anything else?" is intake's job.
+ */
+const handBack = (deps: ToolDeps, returns: string): llm.AgentHandoff =>
+  llm.handoff({ agent: deps.intakeAgent(), returns });
 
 /**
  * The reference, spelled for speech.
@@ -258,7 +316,7 @@ function makeAmendDraft(deps: ToolDeps) {
 
 // ── cancel_ticket ───────────────────────────────────────────────────────────
 
-function makeCancelTicket() {
+function makeCancelTicket(deps: ToolDeps) {
   return llm.tool({
     name: 'cancel_ticket',
     description:
@@ -269,7 +327,10 @@ function makeCancelTicket() {
       data.draft = null;
       data.cancelled = true;
 
-      return 'Nothing was filed. Confirm that to the caller and ask if there is anything else.';
+      return handBack(
+        deps,
+        'Nothing was filed. Confirm that to the caller and ask if there is anything else.',
+      );
     },
   });
 }

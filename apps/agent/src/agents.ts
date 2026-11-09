@@ -161,6 +161,12 @@ const CONFIRM_ADDENDUM = [
   '',
   'Anything unclear - "uh", "hmm", silence, a question - is NOT agreement. Ask again,',
   'in one short sentence. Never call create_ticket on an ambiguous answer.',
+  '',
+  'Right now you hold only create_ticket, amend_draft, cancel_ticket and end_call.',
+  'The instructions above name others, because they are the same instructions intake',
+  'was given. Do not reach for one you do not have and do not tell the caller a tool',
+  'is missing: anything that needs more detail gathered goes through amend_draft,',
+  'which hands the call back for exactly that.',
 ].join('\n');
 
 export { TURN_HANDLING, TTS_TEXT_TRANSFORMS };
