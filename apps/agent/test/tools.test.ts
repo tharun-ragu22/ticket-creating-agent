@@ -268,6 +268,19 @@ describe('create_ticket', () => {
     expect(h.events.kinds().filter((k) => k === 'ticket_created')).toHaveLength(1);
   });
 
+  it('files the ticket even when the transcript cannot be saved', async () => {
+    const broken = makeToolHarness();
+    broken.transcript.save = async () => {
+      throw new Error('transcript API unreachable');
+    };
+
+    await tools.propose_ticket.execute(VALID_DRAFT, broken.opts);
+    await tools.create_ticket.execute({}, broken.opts);
+
+    expect(broken.provider.createCalls).toHaveLength(1);
+    expect(broken.provider.createCalls[0]?.transcriptRef).toBeNull();
+  });
+
   it('attaches the transcript, so a technician can read what was actually said', async () => {
     await propose();
     await tools.create_ticket.execute({}, h.opts);
@@ -339,6 +352,19 @@ describe('amend_draft', () => {
 
     expect(h.userData.draft).toBeNull();
     expect(isHandoff(result)).toBe(true);
+  });
+
+  /*
+   * The caller's complaint on the phone: the agent agreed to the correction and
+   * the card went on showing the summary that had just been corrected away.
+   * Clearing state is not enough — the app only knows what it is told.
+   */
+  it('tells the app the summary it is showing has been superseded', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    await tools.amend_draft.execute({ correction: 'It is the printer' }, h.opts);
+
+    expect(h.events.kinds()).toEqual(['ticket_draft', 'ticket_draft_dropped']);
+    expect(h.events.published.at(-1)).toMatchObject({ reason: 'amended' });
   });
 
   it('does not advance the ticket sequence: an amendment is the same ticket', async () => {
@@ -476,6 +502,16 @@ describe('cancel_ticket', () => {
     expect(h.userData.cancelled).toBe(true);
     expect(h.provider.createCalls).toHaveLength(0);
   });
+
+  it('takes the card off the screen rather than leaving a dead draft on it', async () => {
+    await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+    await tools.cancel_ticket.execute({}, h.opts);
+
+    expect(h.events.published.at(-1)).toMatchObject({
+      kind: 'ticket_draft_dropped',
+      reason: 'cancelled',
+    });
+  });
 });
 
 describe('lookup_known_assets', () => {
@@ -517,6 +553,46 @@ describe('comment_on_existing_ticket', () => {
     expect(h.provider.commentCalls).toEqual([
       { id: 'SI-10388', body: 'Caller rang back; still dropping.' },
     ]);
+  });
+
+  /*
+   * The post-filing correction. amend_draft refuses once a ticket is filed and
+   * tells the model to comment instead, and the reference it then has is the
+   * one this call produced — which the profile, loaded before the call, cannot
+   * list. Rejecting it left the caller's addition going nowhere.
+   */
+  describe('the ticket filed on this very call', () => {
+    const filedHere = async (): Promise<string> => {
+      await tools.propose_ticket.execute(VALID_DRAFT, h.opts);
+      await tools.create_ticket.execute({}, h.opts);
+      return h.userData.createdTicket!.providerTicketId;
+    };
+
+    it('accepts it, even though the profile cannot list it', async () => {
+      const ref = await filedHere();
+      await tools.comment_on_existing_ticket.execute(
+        { providerTicketId: ref, note: 'Caller added that it also affects scanning.' },
+        h.opts,
+      );
+
+      expect(h.provider.commentCalls).toEqual([
+        { id: ref, body: 'Caller added that it also affects scanning.' },
+      ]);
+    });
+
+    it('re-publishes the ticket, so the addition appears on the card', async () => {
+      const ref = await filedHere();
+      await tools.comment_on_existing_ticket.execute(
+        { providerTicketId: ref, note: 'Also affects scanning.' },
+        h.opts,
+      );
+
+      const last = h.events.published.at(-1) as { kind: string; ticket: { comments: { body: string }[] } };
+      expect(last.kind).toBe('ticket_created');
+      expect(last.ticket.comments.map((c) => c.body)).toEqual(['Also affects scanning.']);
+      // And the agent's own copy, so a second comment does not drop the first.
+      expect(h.userData.createdTicket?.comments).toHaveLength(1);
+    });
   });
 
   /** Otherwise a hallucinated reference would silently comment on a stranger's ticket. */

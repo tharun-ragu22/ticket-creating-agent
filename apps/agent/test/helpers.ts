@@ -151,7 +151,11 @@ export class CountingTicketProvider implements TicketProvider {
   }
 
   async getTicket(id: string): Promise<Ticket | null> {
-    return [...this.byKey.values()].find((t) => t.id === id) ?? null;
+    // Either reference, as a real provider must: the agent only ever holds
+    // providerTicketId. See the contract suite.
+    return (
+      [...this.byKey.values()].find((t) => t.id === id || t.providerTicketId === id) ?? null
+    );
   }
 
   async findByIdempotencyKey(key: string): Promise<Ticket | null> {
@@ -165,8 +169,29 @@ export class CountingTicketProvider implements TicketProvider {
     return { items, nextCursor: null };
   }
 
-  async addComment(id: string, body: string): Promise<void> {
+  async addComment(id: string, body: string, ctx: ProviderCallContext): Promise<void> {
     this.commentCalls.push({ id, body });
+
+    /*
+     * Stored on the ticket, not just counted, so a test can tell "the comment
+     * was sent" from "the comment is on the ticket the app will be shown".
+     * A reference this fake has never issued — the caller's pre-existing open
+     * tickets live in the profile, not here — is still recorded: existence is
+     * the real provider's business, and the contract suite checks it there.
+     */
+    const target = await this.getTicket(id);
+    if (!target) return;
+
+    const comment = {
+      id: `cmt_${this.commentCalls.length}`,
+      authorSubject: ctx.actor.subject,
+      body,
+      createdAt: '2026-11-05T09:06:00.000Z',
+    };
+    this.byKey.set(
+      [...this.byKey.entries()].find(([, t]) => t.id === target.id)![0],
+      { ...target, comments: [...target.comments, comment] },
+    );
   }
 
   async describeSchema(): Promise<TicketSchemaDescriptor> {

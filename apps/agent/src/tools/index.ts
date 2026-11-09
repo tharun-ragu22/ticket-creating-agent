@@ -181,7 +181,19 @@ function makeCreateTicket(deps: ToolDeps) {
         );
       }
 
-      const transcriptRef = await data.transcript.save().catch(() => null);
+      /*
+       * A ticket is worth more than its transcript, so a failed save must not
+       * fail the filing — but it is logged rather than discarded. Swallowed, the
+       * only trace was the board showing "none attached" for a call that
+       * plainly happened, with nothing anywhere to say why.
+       */
+      const transcriptRef = await data.transcript.save().catch((cause: unknown) => {
+        log().warn(
+          { err: cause, room: data.source.roomName },
+          'the transcript could not be saved; filing the ticket without it',
+        );
+        return null;
+      });
 
       const input = CreateTicketInput.parse({
         ...proposed.draft,
@@ -342,6 +354,14 @@ function makeAmendDraft(deps: ToolDeps) {
       // (EV-CONF-03). draftSequence is untouched: this is still one ticket.
       data.draft = null;
 
+      /*
+       * Tell the app the summary it is showing is no longer the summary. The
+       * re-proposal can be several turns away, and in that window the card
+       * showed the very wording the caller had just corrected — which looks
+       * exactly like the correction having been ignored.
+       */
+      await publish(data, { kind: 'ticket_draft_dropped', reason: 'amended' });
+
       return llm.handoff({
         agent: deps.intakeAgent(),
         returns:
@@ -364,6 +384,7 @@ function makeCancelTicket(deps: ToolDeps) {
 
       data.draft = null;
       data.cancelled = true;
+      await publish(data, { kind: 'ticket_draft_dropped', reason: 'cancelled' });
 
       return handBack(
         deps,
@@ -429,7 +450,9 @@ function makeCommentOnExisting() {
     name: 'comment_on_existing_ticket',
     description:
       'The caller is reporting something already covered by one of their open ' +
-      'tickets. Append to that ticket instead of filing a duplicate.',
+      'tickets, or adding to the one this call has just filed. Append to that ' +
+      'ticket instead of filing a duplicate. A filed ticket cannot be amended, so ' +
+      'this is how a correction that arrives after filing gets recorded.',
     parameters: z.object({
       providerTicketId: z
         .string()
@@ -440,13 +463,25 @@ function makeCommentOnExisting() {
     execute: async (args, { ctx }) => {
       const data = callData(ctx);
 
-      // Grounded against the caller's own open tickets. Without this a
-      // hallucinated reference would comment on a stranger's ticket.
-      const known = data.profile.openTickets.some(
-        (t) => t.providerTicketId === args.providerTicketId,
-      );
+      /*
+       * Grounded against the caller's own open tickets — without this a
+       * hallucinated reference would comment on a stranger's ticket — plus the
+       * one filed on this call, which the profile cannot contain because it was
+       * loaded before the call began. That omission was a dead end: amend_draft
+       * refuses once a ticket is filed and says "add a comment to it instead",
+       * and the only reference the model has at that point is the one this
+       * check used to reject.
+       */
+      const filedHere = data.createdTicket?.providerTicketId === args.providerTicketId;
+      const known =
+        filedHere ||
+        data.profile.openTickets.some((t) => t.providerTicketId === args.providerTicketId);
+
       if (!known) {
-        const list = data.profile.openTickets.map((t) => t.providerTicketId).join(', ');
+        const list = [
+          ...data.profile.openTickets.map((t) => t.providerTicketId),
+          ...(data.createdTicket ? [data.createdTicket.providerTicketId] : []),
+        ].join(', ');
         throw new llm.ToolError(
           `${args.providerTicketId} is not one of this caller's open tickets` +
             `${list ? ` (${list})` : ''}. Do not guess a reference; file a new ticket instead.`,
@@ -454,6 +489,24 @@ function makeCommentOnExisting() {
       }
 
       await data.tickets.addComment(args.providerTicketId, args.note, providerCtx(data));
+
+      /*
+       * Re-read and re-publish, so an addition to the ticket this call filed
+       * shows up on the card the caller is looking at. Only for that ticket:
+       * the others are not on screen, and a failed refresh must not undo a
+       * comment the provider has already accepted.
+       */
+      if (data.createdTicket && filedHere) {
+        const refreshed = await data.tickets
+          .getTicket(data.createdTicket.id, providerCtx(data))
+          .catch(() => null);
+
+        if (refreshed) {
+          data.createdTicket = refreshed;
+          await publish(data, { kind: 'ticket_created', ticket: refreshed });
+        }
+      }
+
       return `Added to ${formatTicketRefForSpeech(args.providerTicketId)}.`;
     },
   });

@@ -95,6 +95,76 @@ describe('ticketEventReducer', () => {
     expect(amended.draft?.category).toBe('printing');
   });
 
+  /*
+   * The correction window. The agent drops the draft the moment the caller
+   * corrects it, and the re-proposal is several turns away — so without this
+   * the phone shows the corrected-away summary as if it still stood.
+   */
+  describe('a draft the agent has thrown away', () => {
+    const drafted = ticketEventReducer(
+      initialCallTicketState,
+      text({ kind: 'ticket_draft', draft: DRAFT }),
+    );
+
+    it('marks it as being corrected rather than leaving it looking current', () => {
+      const dropped = ticketEventReducer(
+        drafted,
+        text({ kind: 'ticket_draft_dropped', reason: 'amended' }),
+      );
+
+      expect(dropped.amending).toBe(true);
+      // Still on screen: a card that vanishes mid-call reads as a crash.
+      expect(dropped.draft?.title).toBe(DRAFT.title);
+    });
+
+    it('clears the flag when the corrected draft arrives', () => {
+      const dropped = ticketEventReducer(
+        drafted,
+        text({ kind: 'ticket_draft_dropped', reason: 'amended' }),
+      );
+      const reproposed = ticketEventReducer(
+        dropped,
+        text({ kind: 'ticket_draft', draft: { ...DRAFT, title: 'The printer, not the laptop, drops off' } }),
+      );
+
+      expect(reproposed.amending).toBe(false);
+      expect(reproposed.draft?.title).toBe('The printer, not the laptop, drops off');
+    });
+
+    it('takes the card away on a cancellation, since there is no ticket coming', () => {
+      const cancelled = ticketEventReducer(
+        drafted,
+        text({ kind: 'ticket_draft_dropped', reason: 'cancelled' }),
+      );
+
+      expect(cancelled).toMatchObject({ draft: null, ticket: null, amending: false });
+    });
+
+    /*
+     * A second problem cancelled on a call that already filed one. The
+     * reference the caller wrote down must not disappear with it.
+     */
+    it('keeps a ticket already filed on this call when a later draft is cancelled', () => {
+      const filed = ticketEventReducer(drafted, text({ kind: 'ticket_created', ticket: TICKET }));
+      const cancelled = ticketEventReducer(
+        filed,
+        text({ kind: 'ticket_draft_dropped', reason: 'cancelled' }),
+      );
+
+      expect(cancelled.ticket?.providerTicketId).toBe('SI-10432');
+      expect(cancelled.draft).toBeNull();
+    });
+
+    it('ignores a reason it does not recognise, like any malformed frame', () => {
+      const unchanged = ticketEventReducer(
+        drafted,
+        text({ kind: 'ticket_draft_dropped', reason: 'because' }),
+      );
+
+      expect(unchanged).toBe(drafted);
+    });
+  });
+
   /**
    * The reducer is fed by a network topic, so malformed input is expected
    * rather than exceptional. A thrown error here would unmount the call screen

@@ -11,7 +11,7 @@ import { colors } from '../theme';
  */
 export function DraftCard({ state }: { state: CallTicketState }): React.JSX.Element | null {
   const [open, setOpen] = useState(false);
-  const { draft, ticket, failure } = state;
+  const { draft, ticket, failure, amending } = state;
 
   // The filed ticket carries the same fields plus a reference, so one card
   // serves both and the caller sees it become real rather than be replaced.
@@ -27,24 +27,36 @@ export function DraftCard({ state }: { state: CallTicketState }): React.JSX.Elem
     >
       <View style={styles.header}>
         <Text style={[styles.badge, ticket ? styles.badgeFiled : null]}>
-          {ticket ? ticket.providerTicketId : 'DRAFT'}
+          {ticket ? ticket.providerTicketId : amending ? 'UPDATING' : 'DRAFT'}
         </Text>
         <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
       </View>
 
-      <Text style={styles.title} numberOfLines={open ? undefined : 2}>
+      <Text
+        style={[styles.title, amending ? styles.superseded : null]}
+        numberOfLines={open ? undefined : 2}
+      >
         {shown.title}
       </Text>
-      <Text style={styles.meta}>
+      <Text style={[styles.meta, amending ? styles.superseded : null]}>
         {shown.category} · {shown.priority}
         {shown.affectedAsset ? ` · ${shown.affectedAsset.label}` : ''}
       </Text>
+
+      {/*
+        The correction the caller just made, which takes the agent several turns
+        to gather and re-propose. Without this line the card sits there showing
+        the wording they corrected, which reads as the correction being ignored.
+      */}
+      {amending ? (
+        <Text style={styles.amending}>Updating this with your correction…</Text>
+      ) : null}
 
       {failure ? <Text style={styles.failure}>Could not file it: {failure}</Text> : null}
 
       {open ? (
         <View style={styles.details}>
-          <Field label="What happens" value={shown.description} />
+          <Field label="What happened" value={shown.description} />
           {shown.affectedAsset ? (
             <Field
               label="Device"
@@ -61,6 +73,15 @@ export function DraftCard({ state }: { state: CallTicketState }): React.JSX.Elem
           />
           {shown.troubleshootingTried.length > 0 ? (
             <Field label="Already tried" value={shown.troubleshootingTried.join('; ')} />
+          ) : null}
+          {ticket && ticket.comments.length > 0 ? (
+            // Anything added after filing arrives as a comment, because a filed
+            // ticket cannot be amended. It belongs on the card for the same
+            // reason the draft does: the caller asked for it.
+            <Field
+              label="Added since"
+              value={ticket.comments.map((comment) => comment.body).join('\n')}
+            />
           ) : null}
           {ticket ? <Field label="Reported as" value={ticket.reporter.displayName} /> : null}
         </View>
@@ -99,6 +120,8 @@ const styles = StyleSheet.create({
   chevron: { color: colors.muted, fontSize: 12 },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   meta: { color: colors.muted, fontSize: 13 },
+  superseded: { opacity: 0.45 },
+  amending: { color: colors.accent, fontSize: 13 },
   failure: { color: colors.danger, fontSize: 13 },
   details: { marginTop: 8, gap: 10 },
   field: { gap: 2 },

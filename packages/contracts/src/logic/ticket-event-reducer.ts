@@ -15,12 +15,22 @@ export interface CallTicketState {
   readonly ticket: Ticket | null;
   /** Why the last attempt to file failed, if it did. */
   readonly failure: string | null;
+  /**
+   * True between a correction and the re-proposal that answers it.
+   *
+   * The draft on screen is the one the caller just corrected, so showing it
+   * unchanged says the correction was lost. It stays on screen rather than
+   * vanishing — a card that disappears mid-call reads as a crash — but it is
+   * marked as superseded until propose_ticket sends the new one.
+   */
+  readonly amending: boolean;
 }
 
 export const initialCallTicketState: CallTicketState = {
   draft: null,
   ticket: null,
   failure: null,
+  amending: false,
 };
 
 /**
@@ -40,15 +50,26 @@ export function ticketEventReducer(state: CallTicketState, payload: string): Cal
     case 'ticket_draft':
       // An amendment replaces the proposal and clears a stale failure: the
       // caller is being read back something new.
-      return { draft: event.draft, ticket: null, failure: null };
+      return { draft: event.draft, ticket: null, failure: null, amending: false };
+
+    case 'ticket_draft_dropped':
+      /*
+       * A cancellation clears the draft and nothing else. Any ticket already
+       * filed on this call stays: the caller is holding its reference, and
+       * taking the card away because a *later* draft was dropped would suggest
+       * the filed one went with it.
+       */
+      return event.reason === 'cancelled'
+        ? { draft: null, ticket: state.ticket, failure: null, amending: false }
+        : { draft: state.draft, ticket: null, failure: null, amending: true };
 
     case 'ticket_created':
-      return { draft: state.draft, ticket: event.ticket, failure: null };
+      return { draft: state.draft, ticket: event.ticket, failure: null, amending: false };
 
     case 'ticket_failed':
       // The draft stays on screen: the call is still live and the caller can
       // ask to try again.
-      return { draft: state.draft, ticket: null, failure: event.reason };
+      return { draft: state.draft, ticket: null, failure: event.reason, amending: false };
   }
 }
 
