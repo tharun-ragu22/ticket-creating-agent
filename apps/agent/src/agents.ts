@@ -69,9 +69,11 @@ const TURN_HANDLING = {
 const TTS_TEXT_TRANSFORMS = ['filter_markdown', 'filter_emoji'] as const;
 
 /**
- * Gathers the problem. Cannot file anything: `create_ticket` is not on its
- * tool list at all, so skipping confirmation is not merely discouraged, it is
- * unreachable from this agent.
+ * Gathers the problem. Cannot file anything: the create_ticket it holds is a
+ * redirect to propose_ticket with no path to a write, so skipping confirmation
+ * is not merely discouraged, it is unreachable from this agent. It carries the
+ * name only because a model that reaches for a tool it cannot find tells the
+ * caller the system is broken instead of proposing.
  */
 export class IntakeAgent extends voice.Agent<CallUserData> {
   constructor(instructions: string, tools: ReturnType<typeof makeToolTable>) {
@@ -83,6 +85,9 @@ export class IntakeAgent extends voice.Agent<CallUserData> {
         tools.comment_on_existing_ticket,
         tools.cancel_ticket,
         tools.end_call,
+        // Named create_ticket, but it only ever redirects to propose_ticket.
+        // Intake still cannot file; see makeCreateTicketRedirect.
+        tools.create_ticket_redirect,
       ],
       turnHandling: TURN_HANDLING,
     });

@@ -586,12 +586,43 @@ describe('agent tool partitioning', () => {
   const toolsOf = (agent: { toolCtx: { functionTools: Record<string, unknown> } }) =>
     Object.keys(agent.toolCtx.functionTools).sort();
 
-  it('gives intake no way to file a ticket at all', () => {
+  /**
+   * The property is that intake cannot file, not that the name is absent. It
+   * used to be absent, and a model reaching for it got a dead end it narrated
+   * to the caller as a missing tool, so the name is now occupied by a redirect.
+   */
+  it('gives intake no way to file a ticket at all', async () => {
+    const h = makeToolHarness();
+    const intakeCreate = intake.toolCtx.functionTools['create_ticket'] as {
+      execute: (args: unknown, opts: unknown) => Promise<unknown>;
+    };
+
     expect(toolsOf(intake)).toContain('propose_ticket');
-    expect(toolsOf(intake)).not.toContain('create_ticket');
+    await expect(intakeCreate.execute({}, h.opts)).rejects.toThrow(llm.ToolError);
+    expect(h.provider.createCalls).toHaveLength(0);
   });
 
-  it('puts create_ticket only on the confirmation agent', () => {
+  it('points intake at propose_ticket rather than at a missing tool', async () => {
+    const h = makeToolHarness();
+    const intakeCreate = intake.toolCtx.functionTools['create_ticket'] as {
+      execute: (args: unknown, opts: unknown) => Promise<unknown>;
+    };
+
+    await expect(intakeCreate.execute({}, h.opts)).rejects.toThrow(/propose_ticket/);
+  });
+
+  /** Even with a read-back draft in state, intake's copy still cannot write. */
+  it('refuses on intake even when a confirmed draft exists', async () => {
+    const h = makeToolHarness({ draft: { draft: VALID_DRAFT, proposedAt: '2026-01-01T00:00:00Z' } });
+    const intakeCreate = intake.toolCtx.functionTools['create_ticket'] as {
+      execute: (args: unknown, opts: unknown) => Promise<unknown>;
+    };
+
+    await expect(intakeCreate.execute({}, h.opts)).rejects.toThrow(llm.ToolError);
+    expect(h.provider.createCalls).toHaveLength(0);
+  });
+
+  it('puts the filing create_ticket on the confirmation agent', () => {
     expect(toolsOf(confirm)).toContain('create_ticket');
     expect(toolsOf(confirm)).not.toContain('propose_ticket');
   });

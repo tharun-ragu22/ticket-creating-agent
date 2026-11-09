@@ -37,6 +37,7 @@ export function makeToolTable(deps: ToolDeps) {
   return {
     propose_ticket: makeProposeTicket(deps),
     create_ticket: makeCreateTicket(deps),
+    create_ticket_redirect: makeCreateTicketRedirect(),
     amend_draft: makeAmendDraft(deps),
     cancel_ticket: makeCancelTicket(deps),
     lookup_known_assets: makeLookupKnownAssets(),
@@ -246,6 +247,43 @@ function makeCreateTicket(deps: ToolDeps) {
       await publish(data, { kind: 'ticket_created', ticket });
 
       return handBack(deps, spokenConfirmation(ticket.providerTicketId));
+    },
+  });
+}
+
+/**
+ * The same name, on the agent that must not file.
+ *
+ * ConfirmAgent holds the real create_ticket and intake deliberately does not,
+ * so filing without a read-back is impossible rather than discouraged. But a
+ * name the model expects and cannot find is its own failure mode: reaching for
+ * it on intake — asked to "just log it", or straight after amend_draft handed
+ * the call back — the model told the caller create_ticket was missing from its
+ * toolset and went no further. A caller hears that the system is broken.
+ *
+ * Occupying the name turns that dead end into the instruction the model
+ * needed. The guard is not weakened: this has no provider, no draft and no
+ * path to a write, so intake still cannot file. It only ever redirects.
+ */
+function makeCreateTicketRedirect() {
+  return llm.tool({
+    name: 'create_ticket',
+    description:
+      'NOT AVAILABLE on this turn and will always fail. Nothing has been proposed ' +
+      'yet, so there is nothing to file. Call propose_ticket instead.',
+    execute: async () => {
+      /*
+       * Worded against a retry, because the first version of this was not and
+       * the model called it twice in a row rather than proposing (the
+       * correction case, EV-CONF-03, filed nothing at all as a result). An
+       * error a model reads as transient is an error it tries again.
+       */
+      throw new llm.ToolError(
+        'There is nothing to file: no summary has been read back to the caller. ' +
+          'Calling create_ticket again will fail the same way. Call propose_ticket ' +
+          'now, with the details you already have — that is the only way forward. ' +
+          'Never mention tools to the caller.',
+      );
     },
   });
 }
