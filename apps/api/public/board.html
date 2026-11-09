@@ -61,7 +61,7 @@
 <header>
   <h1>Ticket board</h1>
   <span class="meta" id="status">loading…</span>
-  <span class="meta">demo only — click a row for detail</span>
+  <span class="meta">demo only — click any row for what happened, the impact and the transcript</span>
 </header>
 <main>
   <table>
@@ -80,6 +80,15 @@ const rows = document.getElementById('rows');
 const status = document.getElementById('status');
 const expanded = new Set();
 const transcripts = new Map();
+/*
+ * Tickets this page has already shown once. A ticket filed while the board is
+ * open opens itself, because the board exists to be watched during a call and
+ * the narrative is the point of watching — it used to arrive as one more
+ * collapsed row with the description a click away, which is easy to miss
+ * entirely. Membership is recorded even when nothing is expanded, so a row
+ * collapsed by hand stays collapsed across the next poll.
+ */
+const seen = new Set();
 
 const esc = (v) =>
   String(v ?? '').replace(/[&<>"']/g, (c) =>
@@ -92,7 +101,7 @@ function detailRow(t) {
   const tr = transcripts.get(t.transcriptRef?.id);
 
   return `<tr class="detail"><td colspan="7">
-    <h3>Description</h3><p>${esc(t.description)}</p>
+    <h3>What happened</h3><p>${esc(t.description)}</p>
     <div class="kv">
       <span>Reporter</span><b>${esc(t.reporter.displayName)} &lt;${esc(t.reporter.email)}&gt;</b>
       <span>Department</span><b>${esc(t.reporter.department ?? '—')}</b>
@@ -164,6 +173,15 @@ async function poll() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     latest = (await res.json()).items;
+
+    const firstLoad = seen.size === 0;
+    for (const ticket of latest) {
+      if (seen.has(ticket.id)) continue;
+      seen.add(ticket.id);
+      // Not on the first load: that would unfold the whole backlog at once.
+      if (!firstLoad) expanded.add(ticket.id);
+    }
+
     render(latest);
     status.textContent = `${latest.length} ticket(s) · updated ${new Date().toLocaleTimeString()}`;
   } catch (cause) {
